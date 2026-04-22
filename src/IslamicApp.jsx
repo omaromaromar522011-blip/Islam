@@ -374,9 +374,15 @@ const QuranSection = () => {
   );
 };
 
+const stripArabic = (s) => (s || '')
+  .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+  .replace(/[إأآا]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+  .replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').toLowerCase();
+
 const TafsirSection = () => {
   const [surahs, setSurahs] = useState(null);
   const [tafsir, setTafsir] = useState(null);
+  const [quran, setQuran] = useState(null);
   const [loading, setLoading] = useState(true);
   const [surahNum, setSurahNum] = useState(() => {
     const s = parseInt(localStorage.getItem('islam_tafsir_surah') || '1', 10);
@@ -386,16 +392,36 @@ const TafsirSection = () => {
     const a = parseInt(localStorage.getItem('islam_tafsir_ayah') || '1', 10);
     return Number.isNaN(a) ? 1 : a;
   });
+  const [search, setSearch] = useState('');
   const [error, setError] = useState(null);
 
   useEffect(() => {
     Promise.all([
       fetch('/tafsir/surahs.json').then(r => r.json()),
-      fetch('/tafsir/muyassar.json').then(r => r.json())
-    ]).then(([s, t]) => {
-      setSurahs(s); setTafsir(t); setLoading(false);
+      fetch('/tafsir/muyassar.json').then(r => r.json()),
+      fetch('/tafsir/quran.json').then(r => r.json())
+    ]).then(([s, t, q]) => {
+      setSurahs(s); setTafsir(t); setQuran(q); setLoading(false);
     }).catch(e => { setError(e.message); setLoading(false); });
   }, []);
+
+  const searchResults = useMemo(() => {
+    const q = stripArabic(search.trim());
+    if (!quran || !surahs || q.length < 2) return null;
+    const results = [];
+    for (const s of surahs) {
+      const ayahs = quran[s.n];
+      if (!ayahs) continue;
+      for (let i = 1; i <= s.count; i++) {
+        const text = ayahs[i];
+        if (text && stripArabic(text).includes(q)) {
+          results.push({ s: s.n, a: i, name: s.name, text });
+          if (results.length >= 50) return results;
+        }
+      }
+    }
+    return results;
+  }, [search, quran, surahs]);
 
   useEffect(() => {
     localStorage.setItem('islam_tafsir_surah', String(surahNum));
@@ -408,6 +434,35 @@ const TafsirSection = () => {
   const ayahCount = currentSurah ? currentSurah.count : 1;
   const safeAyah = Math.min(Math.max(1, ayahNum), ayahCount);
   const text = tafsir && tafsir[surahNum] && tafsir[surahNum][safeAyah];
+  const ayahText = quran && quran[surahNum] && quran[surahNum][safeAyah];
+
+  const toArabicDigits = (n) => String(n).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+
+  const goToAyah = (s, a) => {
+    setSurahNum(s); setAyahNum(a); setSearch('');
+  };
+
+  const highlight = (text, query) => {
+    if (!query) return text;
+    const q = stripArabic(query);
+    const stripped = stripArabic(text);
+    const idx = stripped.indexOf(q);
+    if (idx < 0) return text;
+    // Map back to original by counting visible chars (approximate)
+    let oi = 0, si = 0;
+    while (si < idx && oi < text.length) {
+      const c = text[oi];
+      if (!/[\u064B-\u065F\u0670\u06D6-\u06ED]/.test(c)) si++;
+      oi++;
+    }
+    let endO = oi, endS = si;
+    while (endS < idx + q.length && endO < text.length) {
+      const c = text[endO];
+      if (!/[\u064B-\u065F\u0670\u06D6-\u06ED]/.test(c)) endS++;
+      endO++;
+    }
+    return <>{text.slice(0, oi)}<mark style={{ background: C.accent, color: C.bg, padding: '0 2px', borderRadius: 3 }}>{text.slice(oi, endO)}</mark>{text.slice(endO)}</>;
+  };
 
   const goPrev = () => {
     if (safeAyah > 1) setAyahNum(safeAyah - 1);
@@ -431,6 +486,66 @@ const TafsirSection = () => {
 
   return (
     <div>
+      {/* Search box */}
+      <div style={{
+        background: C.surface, padding: 12, borderRadius: 12,
+        border: `1px solid ${C.border}`, marginBottom: 12,
+        position: 'relative'
+      }}>
+        <input
+          type="search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="🔍 ابحث عن آية... (مثل: الرحمن، يا أيها الذين آمنوا)"
+          style={{
+            width: '100%', padding: 12, background: C.bg, color: C.text,
+            border: `1px solid ${search ? C.accent : C.border}`, borderRadius: 10,
+            fontSize: 14, fontFamily: 'inherit', textAlign: 'right',
+            boxSizing: 'border-box'
+          }}
+        />
+        {search && (
+          <button onClick={() => setSearch('')} style={{
+            position: 'absolute', left: 18, top: '50%', transform: 'translateY(-50%)',
+            background: 'transparent', color: C.muted, border: 'none',
+            cursor: 'pointer', fontSize: 18
+          }}>✕</button>
+        )}
+      </div>
+
+      {/* Search results */}
+      {searchResults !== null && (
+        <div style={{
+          background: C.surface, padding: 12, borderRadius: 12,
+          border: `1px solid ${C.border}`, marginBottom: 12
+        }}>
+          <div style={{ fontSize: 13, color: C.muted, marginBottom: 10 }}>
+            {searchResults.length === 0 ? 'لا توجد نتائج' :
+              `${toArabicDigits(searchResults.length)}${searchResults.length >= 50 ? '+' : ''} نتيجة`}
+          </div>
+          <div style={{ maxHeight: 360, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {searchResults.map(r => (
+              <button key={`${r.s}_${r.a}`} onClick={() => goToAyah(r.s, r.a)} style={{
+                background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10,
+                padding: 12, cursor: 'pointer', textAlign: 'right', color: C.text,
+                fontFamily: 'inherit'
+              }}>
+                <div style={{ fontSize: 12, color: C.accent, marginBottom: 6, fontWeight: 'bold' }}>
+                  {r.name} — الآية {toArabicDigits(r.a)}
+                </div>
+                <div style={{
+                  fontSize: 15, lineHeight: 1.9, color: C.text,
+                  fontFamily: 'Amiri, "Traditional Arabic", serif'
+                }}>
+                  {highlight(r.text, search)}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Surah/Ayah picker */}
       <div style={{
         background: C.surface, padding: 14, borderRadius: 12,
         border: `1px solid ${C.border}`, marginBottom: 12
@@ -447,7 +562,9 @@ const TafsirSection = () => {
           ))}
         </select>
 
-        <div style={{ fontSize: 13, color: C.muted, marginBottom: 6 }}>رقم الآية (١ — {ayahCount})</div>
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 6 }}>
+          رقم الآية ({toArabicDigits(1)} — {toArabicDigits(ayahCount)})
+        </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={goPrev} style={{
             background: C.bg, color: C.accent, border: `1px solid ${C.border}`,
@@ -469,25 +586,51 @@ const TafsirSection = () => {
         </div>
       </div>
 
+      {/* Ayah + Tafsir card */}
       <div style={{
         background: `linear-gradient(135deg, ${C.surface} 0%, rgba(196,164,89,0.05) 100%)`,
         padding: 18, borderRadius: 14, border: `1px solid ${C.accent}`
       }}>
         <div style={{
           textAlign: 'center', color: C.accentLight, fontSize: 16, fontWeight: 'bold',
-          marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${C.border}`
+          marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${C.border}`
         }}>
-          {currentSurah && currentSurah.name} — الآية {safeAyah}
+          {currentSurah && currentSurah.name} — الآية {toArabicDigits(safeAyah)}
+        </div>
+
+        {/* Ayah text */}
+        <div style={{
+          background: 'rgba(196,164,89,0.06)', padding: 16, borderRadius: 12,
+          border: `1px solid ${C.border}`, marginBottom: 14
+        }}>
+          <div style={{
+            color: C.accentLight, fontSize: 22, lineHeight: 2.2, textAlign: 'center',
+            fontFamily: 'Amiri, "Traditional Arabic", "Scheherazade New", serif',
+            fontWeight: 500
+          }}>
+            {ayahText || '—'}
+            {ayahText && (
+              <span style={{
+                display: 'inline-block', margin: '0 6px', color: C.accent,
+                fontSize: 18, verticalAlign: 'middle'
+              }}>﴿{toArabicDigits(safeAyah)}﴾</span>
+            )}
+          </div>
+        </div>
+
+        {/* Tafsir */}
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 6, fontWeight: 'bold' }}>
+          📚 التفسير الميسّر
         </div>
         <div style={{
-          color: C.text, fontSize: 17, lineHeight: 2.1, textAlign: 'right',
+          color: C.text, fontSize: 16, lineHeight: 2, textAlign: 'right',
           fontFamily: 'Amiri, "Traditional Arabic", serif'
         }}>
           {text || 'لا يتوفر تفسير لهذه الآية'}
         </div>
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}`,
-          fontSize: 12, color: C.muted, textAlign: 'center' }}>
-          التفسير الميسّر — مجمع الملك فهد لطباعة المصحف الشريف
+          fontSize: 11, color: C.muted, textAlign: 'center' }}>
+          مجمع الملك فهد لطباعة المصحف الشريف
         </div>
       </div>
     </div>
