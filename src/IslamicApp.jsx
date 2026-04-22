@@ -14,32 +14,297 @@ const C = {
   sub: "#a3aab2"
 };
 
+const ADHAN_VOICES = [
+  { id: 'makkah', label: 'الحرم المكي', file: '/adhan/makkah.mp3' },
+  { id: 'madinah', label: 'الحرم النبوي', file: '/adhan/madinah.mp3' },
+  { id: 'fajr', label: 'أذان الفجر', file: '/adhan/fajr.mp3' }
+];
+
+const PRAYER_NAMES = {
+  fajr: "الفجر", sunrise: "الشروق", dhuhr: "الظهر",
+  asr: "العصر", maghrib: "المغرب", isha: "العشاء"
+};
+
+const DEFAULT_ADHAN_SETTINGS = {
+  enabled: false,
+  voice: 'makkah',
+  fajrVoice: 'fajr',
+  prayers: { fajr: true, dhuhr: true, asr: true, maghrib: true, isha: true }
+};
+
 const PrayerTimes = ({ pos }) => {
   const [times, setTimes] = useState(null);
+  const [now, setNow] = useState(new Date());
+  const [showSettings, setShowSettings] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [settings, setSettings] = useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('islam_adhan') || 'null');
+      return s ? { ...DEFAULT_ADHAN_SETTINGS, ...s, prayers: { ...DEFAULT_ADHAN_SETTINGS.prayers, ...(s.prayers || {}) } } : DEFAULT_ADHAN_SETTINGS;
+    } catch { return DEFAULT_ADHAN_SETTINGS; }
+  });
+  const audioRef = useRef(null);
+  const playedRef = useRef({}); // { 'fajr_2026-04-22': true }
+  const settingsRef = useRef(settings);
+  const timesRef = useRef(null);
+
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { timesRef.current = times; }, [times]);
 
   useEffect(() => {
-    if (pos) {
+    localStorage.setItem('islam_adhan', JSON.stringify(settings));
+  }, [settings]);
+
+  useEffect(() => {
+    if (!pos) return;
+    const update = () => {
       const coordinates = new adhan.Coordinates(pos.lat, pos.lon);
       const params = adhan.CalculationMethod.MuslimWorldLeague();
-      const date = new Date();
-      const prayerTimes = new adhan.PrayerTimes(coordinates, date, params);
-      setTimes(prayerTimes);
-    }
+      const pt = new adhan.PrayerTimes(coordinates, new Date(), params);
+      setTimes(pt);
+    };
+    update();
+    const id = setInterval(update, 60_000);
+    return () => clearInterval(id);
   }, [pos]);
 
-  const names = { fajr: "الفجر", sunrise: "الشروق", dhuhr: "الظهر", asr: "العصر", maghrib: "المغرب", isha: "العشاء" };
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Adhan checker
+  useEffect(() => {
+    const check = () => {
+      const t = timesRef.current;
+      const s = settingsRef.current;
+      if (!t || !s.enabled) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const nowMs = Date.now();
+      ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'].forEach(p => {
+        if (!s.prayers[p]) return;
+        const key = `${p}_${today}`;
+        if (playedRef.current[key]) return;
+        const diff = nowMs - t[p].getTime();
+        if (diff >= 0 && diff < 60_000) {
+          playedRef.current[key] = true;
+          const voiceId = p === 'fajr' ? (s.fajrVoice || s.voice) : s.voice;
+          const voice = ADHAN_VOICES.find(v => v.id === voiceId) || ADHAN_VOICES[0];
+          if (audioRef.current) {
+            audioRef.current.src = voice.file;
+            audioRef.current.play().catch(e => console.warn('Adhan play blocked:', e));
+          }
+        }
+      });
+    };
+    check();
+    const id = setInterval(check, 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const unlockAudio = async () => {
+    if (!audioRef.current) return;
+    try {
+      audioRef.current.src = ADHAN_VOICES.find(v => v.id === settings.voice).file;
+      audioRef.current.muted = true;
+      await audioRef.current.play();
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.muted = false;
+      setAudioUnlocked(true);
+      setSettings(s => ({ ...s, enabled: true }));
+    } catch (e) {
+      alert('لم نتمكن من تفعيل الصوت. يرجى السماح بتشغيل الصوت من إعدادات المتصفح.');
+    }
+  };
+
+  const previewVoice = (voiceId) => {
+    if (!audioRef.current) return;
+    const voice = ADHAN_VOICES.find(v => v.id === voiceId);
+    audioRef.current.src = voice.file;
+    audioRef.current.muted = false;
+    audioRef.current.play().catch(() => {});
+  };
+
+  const stopPreview = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
+  // Determine next prayer
+  const nextPrayer = useMemo(() => {
+    if (!times) return null;
+    const order = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+    for (const p of order) {
+      if (times[p].getTime() > now.getTime()) return { name: p, time: times[p] };
+    }
+    // After isha, next is tomorrow's fajr (approximate using today's fajr + 1 day)
+    return { name: 'fajr', time: new Date(times.fajr.getTime() + 86400000), tomorrow: true };
+  }, [times, now]);
+
+  const formatCountdown = (target) => {
+    const ms = target.getTime() - now.getTime();
+    if (ms <= 0) return '٠٠:٠٠:٠٠';
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return [h, m, s].map(x => String(x).padStart(2, '0')).join(':')
+      .replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+  };
 
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      {times ? Object.keys(names).map(p => (
-        <div key={p} style={{
-          display: 'flex', justifyContent: 'space-between', padding: '16px',
-          background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`
+    <div>
+      <audio ref={audioRef} preload="none" />
+
+      {/* Next prayer banner */}
+      {nextPrayer && (
+        <div style={{
+          background: `linear-gradient(135deg, ${C.surface} 0%, rgba(196,164,89,0.15) 100%)`,
+          padding: 18, borderRadius: 16, border: `1px solid ${C.accent}`,
+          marginBottom: 14, textAlign: 'center'
         }}>
-          <span style={{ color: C.accentLight, fontWeight: 'bold' }}>{names[p]}</span>
-          <span style={{ color: C.text }}>{times[p].toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
+          <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>
+            {nextPrayer.tomorrow ? 'صلاة الفجر — غداً' : 'الصلاة القادمة'}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 'bold', color: C.accentLight, marginBottom: 6 }}>
+            {PRAYER_NAMES[nextPrayer.name]}
+          </div>
+          <div style={{ fontSize: 28, fontWeight: 'bold', color: C.accent, fontVariantNumeric: 'tabular-nums' }}>
+            {formatCountdown(nextPrayer.time)}
+          </div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+            متبقي حتى الأذان
+          </div>
         </div>
-      )) : <div style={{ color: C.muted, textAlign: 'center' }}>جاري حساب المواقيت...</div>}
+      )}
+
+      {/* Adhan toggle button */}
+      <button onClick={() => setShowSettings(s => !s)} style={{
+        width: '100%', padding: 14, marginBottom: 14,
+        background: settings.enabled ? 'rgba(34,197,94,0.12)' : C.surface,
+        color: settings.enabled ? '#22c55e' : C.text,
+        border: `1px solid ${settings.enabled ? '#22c55e' : C.border}`,
+        borderRadius: 12, cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        fontSize: 15, fontWeight: 'bold'
+      }}>
+        <span>{settings.enabled ? '🔔 الأذان مفعّل' : '🔕 إعدادات الأذان'}</span>
+        <span style={{ fontSize: 13, color: C.muted }}>{showSettings ? '▲' : '▼'}</span>
+      </button>
+
+      {showSettings && (
+        <div style={{
+          background: C.surface, padding: 16, borderRadius: 14,
+          border: `1px solid ${C.border}`, marginBottom: 14
+        }}>
+          {!audioUnlocked && !settings.enabled && (
+            <div style={{
+              background: 'rgba(196,164,89,0.08)', padding: 12, borderRadius: 10,
+              marginBottom: 14, fontSize: 13, color: C.accentLight, lineHeight: 1.7
+            }}>
+              ℹ️ لتفعيل تنبيه الأذان، اضغط الزر أدناه مرة واحدة. المتصفحات تشترط تفاعل المستخدم لتشغيل الصوت تلقائياً.
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span style={{ fontWeight: 'bold' }}>تشغيل الأذان عند موعد الصلاة</span>
+            <button onClick={() => {
+              if (settings.enabled) setSettings(s => ({ ...s, enabled: false }));
+              else unlockAudio();
+            }} style={{
+              width: 56, height: 30, borderRadius: 15, border: 'none', cursor: 'pointer',
+              background: settings.enabled ? '#22c55e' : C.border,
+              position: 'relative', transition: 'background .2s'
+            }}>
+              <div style={{
+                position: 'absolute', top: 3, [settings.enabled ? 'left' : 'right']: 3,
+                width: 24, height: 24, borderRadius: '50%', background: '#fff',
+                transition: 'all .2s'
+              }} />
+            </button>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>صوت الأذان</div>
+            {ADHAN_VOICES.filter(v => v.id !== 'fajr').map(v => (
+              <div key={v.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: 10, marginBottom: 6, borderRadius: 10, cursor: 'pointer',
+                background: settings.voice === v.id ? 'rgba(196,164,89,0.12)' : C.bg,
+                border: `1px solid ${settings.voice === v.id ? C.accent : C.border}`
+              }} onClick={() => setSettings(s => ({ ...s, voice: v.id }))}>
+                <span style={{ color: settings.voice === v.id ? C.accentLight : C.text, fontWeight: 'bold' }}>
+                  {settings.voice === v.id ? '● ' : '○ '}{v.label}
+                </span>
+                <button onClick={e => { e.stopPropagation(); previewVoice(v.id); }} style={{
+                  background: 'transparent', color: C.accent, border: `1px solid ${C.border}`,
+                  padding: '4px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12
+                }}>▶ معاينة</button>
+              </div>
+            ))}
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 8, marginBottom: 6 }}>
+              صوت أذان الفجر مميز («الصلاة خير من النوم»):
+            </div>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: 10, borderRadius: 10,
+              background: 'rgba(196,164,89,0.06)', border: `1px solid ${C.border}`
+            }}>
+              <span style={{ color: C.accentLight }}>أذان الفجر التقليدي</span>
+              <button onClick={() => previewVoice('fajr')} style={{
+                background: 'transparent', color: C.accent, border: `1px solid ${C.border}`,
+                padding: '4px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12
+              }}>▶ معاينة</button>
+            </div>
+            <button onClick={stopPreview} style={{
+              marginTop: 8, width: '100%', background: 'transparent',
+              color: C.muted, border: `1px solid ${C.border}`,
+              padding: 8, borderRadius: 8, cursor: 'pointer', fontSize: 12
+            }}>■ إيقاف المعاينة</button>
+          </div>
+
+          <div>
+            <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>تنبيهات الصلوات</div>
+            {['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'].map(p => (
+              <label key={p} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: 10, marginBottom: 4, background: C.bg, borderRadius: 8,
+                cursor: 'pointer'
+              }}>
+                <span style={{ color: C.text }}>{PRAYER_NAMES[p]}</span>
+                <input type="checkbox" checked={settings.prayers[p]} onChange={e => {
+                  setSettings(s => ({ ...s, prayers: { ...s.prayers, [p]: e.target.checked } }));
+                }} style={{ width: 18, height: 18, accentColor: C.accent, cursor: 'pointer' }} />
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Prayer times list */}
+      <div style={{ display: 'grid', gap: 10 }}>
+        {times ? Object.keys(PRAYER_NAMES).map(p => {
+          const isNext = nextPrayer && nextPrayer.name === p && !nextPrayer.tomorrow;
+          return (
+            <div key={p} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '14px 16px',
+              background: isNext ? 'rgba(196,164,89,0.1)' : C.surface,
+              borderRadius: 12,
+              border: `1px solid ${isNext ? C.accent : C.border}`
+            }}>
+              <span style={{ color: isNext ? C.accent : C.accentLight, fontWeight: 'bold' }}>
+                {isNext && '◆ '}{PRAYER_NAMES[p]}
+              </span>
+              <span style={{ color: C.text, fontVariantNumeric: 'tabular-nums' }}>
+                {times[p].toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          );
+        }) : <div style={{ color: C.muted, textAlign: 'center', padding: 20 }}>جاري حساب المواقيت...</div>}
+      </div>
     </div>
   );
 };
