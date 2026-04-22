@@ -17,7 +17,17 @@ const C = {
 const ADHAN_VOICES = [
   { id: 'makkah', label: 'الحرم المكي', file: '/adhan/makkah.mp3' },
   { id: 'madinah', label: 'الحرم النبوي', file: '/adhan/madinah.mp3' },
-  { id: 'fajr', label: 'أذان الفجر', file: '/adhan/fajr.mp3' }
+  { id: 'azan1', label: 'أذان رقم ١', file: '/adhan/azan1.mp3' },
+  { id: 'azan3', label: 'أذان رقم ٣', file: '/adhan/azan3.mp3' },
+  { id: 'azan4', label: 'أذان رقم ٤', file: '/adhan/azan4.mp3' },
+  { id: 'azan6', label: 'أذان رقم ٦', file: '/adhan/azan6.mp3' },
+  { id: 'azan7', label: 'أذان رقم ٧', file: '/adhan/azan7.mp3' },
+  { id: 'azan8', label: 'أذان رقم ٨', file: '/adhan/azan8.mp3' },
+  { id: 'azan9', label: 'أذان رقم ٩', file: '/adhan/azan9.mp3' },
+  { id: 'azan11', label: 'أذان رقم ١١', file: '/adhan/azan11.mp3' },
+  { id: 'azan12', label: 'أذان رقم ١٢', file: '/adhan/azan12.mp3' },
+  { id: 'azan13', label: 'أذان رقم ١٣', file: '/adhan/azan13.mp3' },
+  { id: 'fajr', label: 'أذان الفجر التقليدي', file: '/adhan/fajr.mp3' }
 ];
 
 const PRAYER_NAMES = {
