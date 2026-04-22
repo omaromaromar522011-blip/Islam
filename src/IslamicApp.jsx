@@ -109,15 +109,30 @@ const QiblaSection = ({ pos }) => {
     }
   }, [pos]);
 
+  const smoothRef = useRef(null);
+  const lastUpdateRef = useRef(0);
   useEffect(() => {
     const handleMotion = (e) => {
       let h = null;
       if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;
       else if (typeof e.alpha === 'number') h = 360 - e.alpha;
-      if (h !== null && !Number.isNaN(h)) {
-        setHeading(h);
-        setHasOrientation(true);
+      if (h === null || Number.isNaN(h)) return;
+
+      // Smooth using shortest-arc circular mean
+      if (smoothRef.current === null) {
+        smoothRef.current = h;
+      } else {
+        let diff = ((h - smoothRef.current + 540) % 360) - 180;
+        smoothRef.current = (smoothRef.current + diff * 0.18 + 360) % 360;
       }
+
+      const now = Date.now();
+      if (now - lastUpdateRef.current < 80) return;
+      lastUpdateRef.current = now;
+
+      const rounded = Math.round(smoothRef.current);
+      setHeading(prev => (Math.abs(prev - rounded) < 1 ? prev : rounded));
+      setHasOrientation(true);
     };
     window.addEventListener('deviceorientationabsolute', handleMotion, true);
     window.addEventListener('deviceorientation', handleMotion, true);
@@ -228,9 +243,9 @@ const QiblaSection = ({ pos }) => {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-          <Stat label="اتجاه القبلة" value={`${angle.toFixed(1)}°`} />
-          <Stat label="اتجاهك" value={hasOrientation ? `${heading.toFixed(1)}°` : '—'} />
-          <Stat label="الفرق" value={hasOrientation ? `${absDiff.toFixed(1)}°` : '—'}
+          <Stat label="اتجاه القبلة" value={`${Math.round(angle)}°`} />
+          <Stat label="اتجاهك" value={hasOrientation ? `${Math.round(heading)}°` : '—'} />
+          <Stat label="الفرق" value={hasOrientation ? `${Math.round(absDiff)}°` : '—'}
             color={aligned ? '#22c55e' : (close ? C.accent : C.text)} />
         </div>
 
