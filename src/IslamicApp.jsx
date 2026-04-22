@@ -82,69 +82,95 @@ const QuranSection = () => {
 
 const QiblaSection = ({ pos }) => {
   const canvasRef = useRef(null);
-  const [angle, setAngle] = useState(0);
-  const [heading, setHeading] = useState(0);
-  const [hasOrientation, setHasOrientation] = useState(false);
+  const headingDisplayRef = useRef(0);
+  const headingTextRef = useRef(null);
+  const diffTextRef = useRef(null);
+  const statusRef = useRef(null);
+  const boxRef = useRef(null);
+
+  // Smooth angles using refs (no React state -> no re-render storm)
+  const targetHeadingRef = useRef(0);
+  const smoothHeadingRef = useRef(0);
+  const screenAngleRef = useRef(0);
+  const isAbsoluteRef = useRef(false);
+
+  const [qiblaAngle, setQiblaAngle] = useState(0);
   const [distance, setDistance] = useState(0);
+  const [hasOrientation, setHasOrientation] = useState(false);
+  const [isAbsolute, setIsAbsolute] = useState(false);
   const [needPermission, setNeedPermission] = useState(false);
 
+  // Compute Qibla angle and distance
   useEffect(() => {
-    if (pos) {
-      const KAABA = { lat: 21.4225, lon: 39.8262 };
-      const φ1 = pos.lat * Math.PI / 180;
-      const λ1 = pos.lon * Math.PI / 180;
-      const φ2 = KAABA.lat * Math.PI / 180;
-      const λ2 = KAABA.lon * Math.PI / 180;
-      const y = Math.sin(λ2 - λ1);
-      const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1);
-      const qibla = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-      setAngle(qibla);
+    if (!pos) return;
+    const KAABA = { lat: 21.4225, lon: 39.8262 };
+    const φ1 = pos.lat * Math.PI / 180;
+    const λ1 = pos.lon * Math.PI / 180;
+    const φ2 = KAABA.lat * Math.PI / 180;
+    const λ2 = KAABA.lon * Math.PI / 180;
+    const y = Math.sin(λ2 - λ1);
+    const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1);
+    const qibla = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    setQiblaAngle(qibla);
 
-      const R = 6371;
-      const dφ = (KAABA.lat - pos.lat) * Math.PI / 180;
-      const dλ = (KAABA.lon - pos.lon) * Math.PI / 180;
-      const a = Math.sin(dφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) ** 2;
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      setDistance(Math.round(R * c));
-    }
+    const R = 6371;
+    const dφ = (KAABA.lat - pos.lat) * Math.PI / 180;
+    const dλ = (KAABA.lon - pos.lon) * Math.PI / 180;
+    const a = Math.sin(dφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    setDistance(Math.round(R * c));
   }, [pos]);
 
-  const smoothRef = useRef(null);
-  const lastUpdateRef = useRef(0);
+  // Track screen orientation (so portrait/landscape doesn't flip the compass)
   useEffect(() => {
-    const handleMotion = (e) => {
-      let h = null;
-      if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;
-      else if (typeof e.alpha === 'number') h = 360 - e.alpha;
-      if (h === null || Number.isNaN(h)) return;
-
-      // Smooth using shortest-arc circular mean
-      if (smoothRef.current === null) {
-        smoothRef.current = h;
-      } else {
-        let diff = ((h - smoothRef.current + 540) % 360) - 180;
-        smoothRef.current = (smoothRef.current + diff * 0.18 + 360) % 360;
-      }
-
-      const now = Date.now();
-      if (now - lastUpdateRef.current < 80) return;
-      lastUpdateRef.current = now;
-
-      const rounded = Math.round(smoothRef.current);
-      setHeading(prev => (Math.abs(prev - rounded) < 1 ? prev : rounded));
-      setHasOrientation(true);
+    const updateScreenAngle = () => {
+      const a = (screen.orientation && typeof screen.orientation.angle === 'number')
+        ? screen.orientation.angle
+        : (window.orientation || 0);
+      screenAngleRef.current = a;
     };
-    window.addEventListener('deviceorientationabsolute', handleMotion, true);
-    window.addEventListener('deviceorientation', handleMotion, true);
+    updateScreenAngle();
+    window.addEventListener('orientationchange', updateScreenAngle);
+    return () => window.removeEventListener('orientationchange', updateScreenAngle);
+  }, []);
+
+  // Listen to device orientation. Prefer absolute (true compass).
+  useEffect(() => {
+    let gotAbsolute = false;
+    const handle = (e, fromAbsoluteEvent) => {
+      let h = null;
+      let absolute = false;
+      if (typeof e.webkitCompassHeading === 'number') {
+        h = e.webkitCompassHeading; // iOS: degrees clockwise from true north
+        absolute = true;
+      } else if (typeof e.alpha === 'number') {
+        h = (360 - e.alpha) % 360;
+        absolute = fromAbsoluteEvent || e.absolute === true;
+      }
+      if (h === null || Number.isNaN(h)) return;
+      // Compensate for screen rotation
+      h = (h + screenAngleRef.current + 360) % 360;
+      targetHeadingRef.current = h;
+      if (absolute && !gotAbsolute) {
+        gotAbsolute = true;
+        isAbsoluteRef.current = true;
+        setIsAbsolute(true);
+      }
+      if (!hasOrientation) setHasOrientation(true);
+    };
+    const absHandler = (e) => handle(e, true);
+    const relHandler = (e) => handle(e, false);
+    window.addEventListener('deviceorientationabsolute', absHandler, true);
+    window.addEventListener('deviceorientation', relHandler, true);
     if (typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function') {
       setNeedPermission(true);
     }
     return () => {
-      window.removeEventListener('deviceorientationabsolute', handleMotion, true);
-      window.removeEventListener('deviceorientation', handleMotion, true);
+      window.removeEventListener('deviceorientationabsolute', absHandler, true);
+      window.removeEventListener('deviceorientation', relHandler, true);
     };
-  }, []);
+  }, [hasOrientation]);
 
   const requestPermission = async () => {
     try {
@@ -153,70 +179,122 @@ const QiblaSection = ({ pos }) => {
     } catch (e) {}
   };
 
-  const diff = ((angle - heading + 540) % 360) - 180;
-  const absDiff = Math.abs(diff);
-  const aligned = hasOrientation && absDiff < 5;
-  const close = hasOrientation && absDiff < 15;
-  const ringColor = aligned ? '#22c55e' : (close ? C.accent : C.border);
-  const arrowColor = aligned ? '#22c55e' : C.accent;
-
+  // Animation loop: smoothly draw canvas + update text refs (no React renders)
   useEffect(() => {
-    const cv = canvasRef.current;
-    if (!cv) return;
-    const ctx = cv.getContext('2d');
-    const cx = 150, cy = 150, R = 120;
-    ctx.clearRect(0, 0, 300, 300);
+    let raf;
+    let lastTextUpdate = 0;
+    const draw = () => {
+      const cv = canvasRef.current;
+      if (!cv) { raf = requestAnimationFrame(draw); return; }
 
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.strokeStyle = ringColor; ctx.lineWidth = 6; ctx.stroke();
+      // Smooth heading toward target (shortest arc)
+      const target = targetHeadingRef.current;
+      let diffSmooth = ((target - smoothHeadingRef.current + 540) % 360) - 180;
+      if (Math.abs(diffSmooth) > 0.05) {
+        smoothHeadingRef.current = (smoothHeadingRef.current + diffSmooth * 0.15 + 360) % 360;
+      }
+      const heading = smoothHeadingRef.current;
 
-    ctx.fillStyle = C.muted; ctx.font = 'bold 13px sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const dirs = [['ش', 0], ['ق', 90], ['ج', 180], ['غ', 270]];
-    dirs.forEach(([t, deg]) => {
-      const r = (((deg - heading) * Math.PI) / 180);
-      const x = cx + Math.sin(r) * (R - 18);
-      const y = cy - Math.cos(r) * (R - 18);
-      ctx.fillStyle = deg === 0 ? C.red : C.muted;
-      ctx.fillText(t, x, y);
-    });
+      // Compute alignment
+      const dq = ((qiblaAngle - heading + 540) % 360) - 180;
+      const absD = Math.abs(dq);
+      const aligned = isAbsoluteRef.current && absD < 5;
+      const close = isAbsoluteRef.current && absD < 15;
+      const ringColor = aligned ? '#22c55e' : (close ? C.accent : C.border);
+      const arrowColor = aligned ? '#22c55e' : C.accent;
 
-    for (let i = 0; i < 72; i++) {
-      const a = ((i * 5 - heading) * Math.PI) / 180;
-      const inner = R - (i % 6 === 0 ? 8 : 4);
-      const x1 = cx + Math.sin(a) * R;
-      const y1 = cy - Math.cos(a) * R;
-      const x2 = cx + Math.sin(a) * inner;
-      const y2 = cy - Math.cos(a) * inner;
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
-      ctx.strokeStyle = C.border; ctx.lineWidth = 1; ctx.stroke();
-    }
+      // Draw
+      const W = cv.width, H = cv.height;
+      const cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 30;
+      const ctx = cv.getContext('2d');
+      ctx.clearRect(0, 0, W, H);
 
-    const nRad = ((angle - heading) * Math.PI) / 180;
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(nRad);
-    ctx.beginPath();
-    ctx.moveTo(0, -(R - 30));
-    ctx.lineTo(14, -(R - 60));
-    ctx.lineTo(6, -(R - 60));
-    ctx.lineTo(6, 30);
-    ctx.lineTo(-6, 30);
-    ctx.lineTo(-6, -(R - 60));
-    ctx.lineTo(-14, -(R - 60));
-    ctx.closePath();
-    ctx.fillStyle = arrowColor; ctx.fill();
-    ctx.restore();
+      // Outer ring
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.strokeStyle = ringColor; ctx.lineWidth = 6; ctx.stroke();
 
-    ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-    ctx.fillStyle = arrowColor; ctx.fill();
+      // Tick marks
+      for (let i = 0; i < 72; i++) {
+        const a = ((i * 5 - heading) * Math.PI) / 180;
+        const inner = R - (i % 6 === 0 ? 10 : 5);
+        const x1 = cx + Math.sin(a) * R, y1 = cy - Math.cos(a) * R;
+        const x2 = cx + Math.sin(a) * inner, y2 = cy - Math.cos(a) * inner;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+        ctx.strokeStyle = C.border; ctx.lineWidth = i % 6 === 0 ? 2 : 1; ctx.stroke();
+      }
 
-    ctx.fillStyle = arrowColor;
-    ctx.font = 'bold 18px sans-serif';
-    ctx.fillText('🕋', cx + Math.sin(nRad) * (R - 15), cy - Math.cos(nRad) * (R - 15));
-  }, [angle, heading, ringColor, arrowColor]);
+      // N/S/E/W labels
+      ctx.font = 'bold 14px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const dirs = [['ش', 0, C.red], ['ق', 90, C.muted], ['ج', 180, C.muted], ['غ', 270, C.muted]];
+      dirs.forEach(([t, deg, color]) => {
+        const r = ((deg - heading) * Math.PI) / 180;
+        const x = cx + Math.sin(r) * (R - 22);
+        const y = cy - Math.cos(r) * (R - 22);
+        ctx.fillStyle = color;
+        ctx.fillText(t, x, y);
+      });
+
+      // Qibla arrow
+      const nRad = ((qiblaAngle - heading) * Math.PI) / 180;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(nRad);
+      ctx.beginPath();
+      ctx.moveTo(0, -(R - 35));
+      ctx.lineTo(14, -(R - 65));
+      ctx.lineTo(6, -(R - 65));
+      ctx.lineTo(6, 28);
+      ctx.lineTo(-6, 28);
+      ctx.lineTo(-6, -(R - 65));
+      ctx.lineTo(-14, -(R - 65));
+      ctx.closePath();
+      ctx.fillStyle = arrowColor; ctx.fill();
+      ctx.restore();
+
+      // Center dot
+      ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+      ctx.fillStyle = arrowColor; ctx.fill();
+
+      // Kaaba marker on rim
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillText('🕋', cx + Math.sin(nRad) * (R + 14), cy - Math.cos(nRad) * (R + 14));
+
+      // Update text refs at most 6x per second
+      const now = performance.now();
+      if (now - lastTextUpdate > 160) {
+        lastTextUpdate = now;
+        const hRound = Math.round(heading);
+        if (headingTextRef.current) headingTextRef.current.textContent = isAbsoluteRef.current ? `${hRound}°` : '—';
+        if (diffTextRef.current) {
+          diffTextRef.current.textContent = isAbsoluteRef.current ? `${Math.round(absD)}°` : '—';
+          diffTextRef.current.style.color = aligned ? '#22c55e' : (close ? C.accent : C.text);
+        }
+        if (statusRef.current) {
+          statusRef.current.textContent =
+            !isAbsoluteRef.current ? '⚠️ هذا الجهاز لا يوفر بوصلة موثوقة، استخدم الزاوية أعلاه'
+            : aligned ? '✅ أنت تتجه نحو الكعبة'
+            : close ? '↻ اقترب من الاتجاه الصحيح'
+            : '↻ التف نحو القبلة';
+          statusRef.current.style.color = aligned ? '#22c55e' : (close ? C.accent : C.muted);
+        }
+        if (boxRef.current) {
+          boxRef.current.style.background = aligned ? 'rgba(34,197,94,0.12)' : C.surface;
+          boxRef.current.style.borderColor = aligned ? '#22c55e' : C.border;
+        }
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [qiblaAngle]);
 
   return (
     <div style={{ textAlign: 'center', color: C.text }}>
-      <canvas ref={canvasRef} width={300} height={300} style={{ display: 'block', margin: '0 auto' }} />
+      <canvas
+        ref={canvasRef}
+        width={320}
+        height={320}
+        style={{ display: 'block', margin: '0 auto', maxWidth: '100%' }}
+      />
 
       {needPermission && (
         <button onClick={requestPermission} style={{
@@ -225,28 +303,20 @@ const QiblaSection = ({ pos }) => {
         }}>تفعيل البوصلة</button>
       )}
 
-      <div style={{
+      <div ref={boxRef} style={{
         marginTop: 16, padding: 16, borderRadius: 14,
-        background: aligned ? 'rgba(34,197,94,0.15)' : C.surface,
-        border: `2px solid ${aligned ? '#22c55e' : C.border}`,
-        transition: 'all .25s'
+        background: C.surface, border: `2px solid ${C.border}`
       }}>
-        <div style={{
-          fontSize: 16, fontWeight: 'bold',
-          color: aligned ? '#22c55e' : (close ? C.accent : C.muted),
-          marginBottom: 10
+        <div ref={statusRef} style={{
+          fontSize: 16, fontWeight: 'bold', color: C.muted, marginBottom: 12, minHeight: 24
         }}>
-          {!hasOrientation ? '⚠️ جهازك لا يدعم البوصلة، يمكنك الاسترشاد بالزاوية فقط'
-            : aligned ? '✅ أنت تتجه نحو الكعبة'
-            : close ? '↻ اقترب، استمر في الالتفاف'
-            : '↻ التف نحو القبلة'}
+          {hasOrientation ? '↻ التف نحو القبلة' : '⚠️ جهازك لا يدعم البوصلة، استرشد بالزاوية'}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-          <Stat label="اتجاه القبلة" value={`${Math.round(angle)}°`} />
-          <Stat label="اتجاهك" value={hasOrientation ? `${Math.round(heading)}°` : '—'} />
-          <Stat label="الفرق" value={hasOrientation ? `${Math.round(absDiff)}°` : '—'}
-            color={aligned ? '#22c55e' : (close ? C.accent : C.text)} />
+          <Stat label="اتجاه القبلة" value={`${Math.round(qiblaAngle)}°`} />
+          <Stat label="اتجاهك" valueRef={headingTextRef} value={'—'} />
+          <Stat label="الفرق" valueRef={diffTextRef} value={'—'} />
         </div>
 
         <div style={{ marginTop: 12, color: C.muted, fontSize: 13 }}>
@@ -257,10 +327,10 @@ const QiblaSection = ({ pos }) => {
   );
 };
 
-const Stat = ({ label, value, color }) => (
+const Stat = ({ label, value, color, valueRef }) => (
   <div style={{ background: C.bg, padding: 10, borderRadius: 10, border: `1px solid ${C.border}` }}>
     <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{label}</div>
-    <div style={{ fontSize: 16, fontWeight: 'bold', color: color || C.text }}>{value}</div>
+    <div ref={valueRef} style={{ fontSize: 16, fontWeight: 'bold', color: color || C.text }}>{value}</div>
   </div>
 );
 
