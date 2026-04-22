@@ -143,7 +143,7 @@ export default function IslamicApp() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, direction: "rtl", fontFamily: 'sans-serif', paddingBottom: 80 }}>
       <header style={{ padding: 20, borderBottom: `1px solid ${C.border}`, textAlign: 'center', position: 'sticky', top: 0, background: C.bg, zIndex: 10 }}>
-        <h1 style={{ color: C.accent, fontSize: 20 }}>نور الإسلام</h1>
+        <h1 style={{ color: C.accent, fontSize: 20 }}>Islam</h1>
       </header>
 
       <main style={{ padding: 15 }}>
