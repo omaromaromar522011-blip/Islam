@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as adhan from 'adhan';
-import { ADHKAR_CATEGORIES } from './adhkarData.js';
 
 const C = {
   bg: "#050a14",
@@ -27,7 +26,9 @@ const ADHAN_VOICES = [
   { id: 'azan11', label: 'أذان رقم ١١', file: '/adhan/azan11.mp3' },
   { id: 'azan12', label: 'أذان رقم ١٢', file: '/adhan/azan12.mp3' },
   { id: 'azan13', label: 'أذان رقم ١٣', file: '/adhan/azan13.mp3' },
-  { id: 'fajr', label: 'أذان الفجر التقليدي', file: '/adhan/fajr.mp3' }
+  { id: 'fajr', label: 'أذان الفجر — الحرم المكي (مع تثويب)', file: '/adhan/fajr.mp3' },
+  { id: 'fajr2', label: 'أذان الفجر — رواية ٢ (مع تثويب)', file: '/adhan/fajr2.mp3' },
+  { id: 'fajr3', label: 'أذان الفجر — رواية ٣ (مع تثويب)', file: '/adhan/fajr3.mp3' }
 ];
 
 const PRAYER_NAMES = {
@@ -238,7 +239,7 @@ const PrayerTimes = ({ pos }) => {
 
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>صوت الأذان</div>
-            {ADHAN_VOICES.filter(v => v.id !== 'fajr').map(v => (
+            {ADHAN_VOICES.filter(v => !v.id.startsWith('fajr')).map(v => (
               <div key={v.id} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: 10, marginBottom: 6, borderRadius: 10, cursor: 'pointer',
@@ -257,17 +258,22 @@ const PrayerTimes = ({ pos }) => {
             <div style={{ fontSize: 12, color: C.muted, marginTop: 8, marginBottom: 6 }}>
               صوت أذان الفجر مميز («الصلاة خير من النوم»):
             </div>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: 10, borderRadius: 10,
-              background: 'rgba(196,164,89,0.06)', border: `1px solid ${C.border}`
-            }}>
-              <span style={{ color: C.accentLight }}>أذان الفجر التقليدي</span>
-              <button onClick={() => previewVoice('fajr')} style={{
-                background: 'transparent', color: C.accent, border: `1px solid ${C.border}`,
-                padding: '4px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12
-              }}>▶ معاينة</button>
-            </div>
+            {ADHAN_VOICES.filter(v => v.id.startsWith('fajr')).map(v => (
+              <div key={v.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: 10, marginBottom: 6, borderRadius: 10, cursor: 'pointer',
+                background: settings.fajrVoice === v.id ? 'rgba(196,164,89,0.12)' : C.bg,
+                border: `1px solid ${settings.fajrVoice === v.id ? C.accent : C.border}`
+              }} onClick={() => setSettings(s => ({ ...s, fajrVoice: v.id }))}>
+                <span style={{ color: settings.fajrVoice === v.id ? C.accentLight : C.text, fontWeight: 'bold' }}>
+                  {settings.fajrVoice === v.id ? '● ' : '○ '}{v.label}
+                </span>
+                <button onClick={(e) => { e.stopPropagation(); previewVoice(v.id); }} style={{
+                  background: 'transparent', color: C.accent, border: `1px solid ${C.border}`,
+                  padding: '4px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12
+                }}>▶ معاينة</button>
+              </div>
+            ))}
             <button onClick={stopPreview} style={{
               marginTop: 8, width: '100%', background: 'transparent',
               color: C.muted, border: `1px solid ${C.border}`,
@@ -1059,32 +1065,122 @@ const DhikrCard = ({ item }) => {
 };
 
 const AdhkarSection = () => {
-  const [activeCat, setActiveCat] = useState(ADHKAR_CATEGORIES[0].id);
-  const cat = useMemo(() => ADHKAR_CATEGORIES.find(c => c.id === activeCat), [activeCat]);
+  const [groups, setGroups] = useState(null);
+  const [activeCat, setActiveCat] = useState(null);
+  const [query, setQuery] = useState('');
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let cancel = false;
+    fetch('/adhkar/all.json')
+      .then(r => r.json())
+      .then(d => {
+        if (cancel) return;
+        setGroups(d);
+        const saved = (() => { try { return localStorage.getItem('islam_adhkar_cat'); } catch { return null; } })();
+        setActiveCat(d.find(g => g.id === saved) ? saved : d[0].id);
+      })
+      .catch(() => setLoadError('تعذر تحميل الأذكار'));
+    return () => { cancel = true; };
+  }, []);
+
+  useEffect(() => {
+    if (activeCat) { try { localStorage.setItem('islam_adhkar_cat', activeCat); } catch {} }
+  }, [activeCat]);
+
+  const stripA = (s) => (s || '')
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0610-\u061A]/g, '')
+    .replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
+    .replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/[«»“”"'()﴿﴾\[\].,;:!?\s]/g, '');
+
+  const searchResults = useMemo(() => {
+    if (!groups || !query.trim() || query.trim().length < 2) return null;
+    const q = stripA(query);
+    const out = [];
+    for (const g of groups) {
+      for (let i = 0; i < g.items.length; i++) {
+        if (stripA(g.items[i].a).includes(q)) {
+          out.push({ groupId: g.id, groupName: g.name, idx: i, item: g.items[i] });
+          if (out.length >= 80) return out;
+        }
+      }
+    }
+    return out;
+  }, [groups, query]);
+
+  if (loadError) return <div style={{ color: C.red, textAlign: 'center', padding: 20 }}>{loadError}</div>;
+  if (!groups || !activeCat) return <div style={{ color: C.muted, textAlign: 'center', padding: 30 }}>جاري التحميل...</div>;
+
+  const cat = groups.find(g => g.id === activeCat) || groups[0];
+  const totalCount = groups.reduce((a, g) => a + g.items.length, 0);
 
   return (
     <div>
-      <div style={{
-        display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, marginBottom: 12,
-        scrollbarWidth: 'thin'
-      }}>
-        {ADHKAR_CATEGORIES.map(c => (
-          <button key={c.id} onClick={() => setActiveCat(c.id)} style={{
-            flexShrink: 0,
-            background: activeCat === c.id ? C.accent : C.surface,
-            color: activeCat === c.id ? C.bg : C.accentLight,
-            border: `1px solid ${C.border}`,
-            padding: '8px 14px', borderRadius: 20, cursor: 'pointer',
-            fontSize: 13, fontWeight: 'bold', whiteSpace: 'nowrap'
-          }}>{c.name} ({c.items.length})</button>
-        ))}
+      <div style={{ position: 'relative', marginBottom: 10 }}>
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder={`ابحث في ${totalCount} ذكر ودعاء...`}
+          style={{
+            width: '100%', padding: '10px 36px 10px 12px',
+            background: C.surface, color: C.text,
+            border: `1px solid ${C.border}`, borderRadius: 10,
+            fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box'
+          }}
+        />
+        {query && (
+          <button onClick={() => setQuery('')} style={{
+            position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+            background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 18
+          }}>✕</button>
+        )}
       </div>
-      <div style={{ color: C.muted, fontSize: 12, marginBottom: 10, textAlign: 'center' }}>
-        {cat.items.length} ذكر
-      </div>
-      <div style={{ display: 'grid', gap: 10 }}>
-        {cat.items.map((item, i) => <DhikrCard key={`${activeCat}-${i}`} item={item} />)}
-      </div>
+
+      {searchResults ? (
+        <div>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 10, textAlign: 'center' }}>
+            {searchResults.length === 0 ? 'لا توجد نتائج' : `${searchResults.length} نتيجة`}
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {searchResults.map((r, i) => (
+              <div key={i} onClick={() => { setQuery(''); setActiveCat(r.groupId); }}
+                style={{
+                  background: C.surface, padding: 14, borderRadius: 12,
+                  border: `1px solid ${C.border}`, cursor: 'pointer'
+                }}>
+                <div style={{ fontSize: 11, color: C.accent, marginBottom: 6 }}>{r.groupName}</div>
+                <div style={{ fontSize: 15, lineHeight: 1.8, color: C.text }}>{r.item.a}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={{
+            display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, marginBottom: 12,
+            scrollbarWidth: 'thin'
+          }}>
+            {groups.map(g => (
+              <button key={g.id} onClick={() => setActiveCat(g.id)} style={{
+                flexShrink: 0,
+                background: activeCat === g.id ? C.accent : C.surface,
+                color: activeCat === g.id ? C.bg : C.accentLight,
+                border: `1px solid ${C.border}`,
+                padding: '8px 14px', borderRadius: 20, cursor: 'pointer',
+                fontSize: 13, fontWeight: 'bold', whiteSpace: 'nowrap'
+              }}>{g.icon ? g.icon + ' ' : ''}{g.name} ({g.items.length})</button>
+            ))}
+          </div>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 10, textAlign: 'center' }}>
+            {cat.items.length} ذكر — إجمالي المكتبة {totalCount}
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {cat.items.map((item, i) => (
+              <DhikrCard key={`${activeCat}-${i}`} item={{ t: item.a, c: item.c }} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };
