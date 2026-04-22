@@ -195,17 +195,144 @@ const AdhkarSection = () => {
   );
 };
 
+function LocationBar({ pos, setPos, city, setCity, status, refresh }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState('');
+
+  const search = async () => {
+    if (!query.trim()) return;
+    setSearching(true); setError('');
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`, {
+        headers: { 'Accept-Language': 'ar' }
+      });
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const r = data[0];
+        const loc = { lat: parseFloat(r.lat), lon: parseFloat(r.lon) };
+        setPos(loc);
+        setCity(r.display_name.split(',').slice(0, 2).join('،'));
+        try { localStorage.setItem('islam_loc', JSON.stringify({ ...loc, city: r.display_name.split(',').slice(0, 2).join('،') })); } catch (e) {}
+        setOpen(false);
+        setQuery('');
+      } else {
+        setError('لم يتم العثور على المدينة');
+      }
+    } catch (e) {
+      setError('تعذر البحث، تحقق من الإنترنت');
+    }
+    setSearching(false);
+  };
+
+  return (
+    <div style={{
+      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+      padding: 12, marginBottom: 12
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, color: C.muted }}>الموقع الحالي</div>
+          <div style={{ color: C.accentLight, fontSize: 14, fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {city || (pos ? `${pos.lat.toFixed(3)}، ${pos.lon.toFixed(3)}` : status)}
+          </div>
+        </div>
+        <button onClick={() => setOpen(o => !o)} style={{ ...btnStyle, padding: '6px 12px', fontSize: 12 }}>
+          {open ? 'إغلاق' : 'تغيير'}
+        </button>
+      </div>
+      {open && (
+        <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && search()}
+              placeholder="ابحث عن مدينة (مثال: الرياض)"
+              style={{
+                flex: 1, padding: '8px 10px',
+                background: C.bg, color: C.text,
+                border: `1px solid ${C.border}`, borderRadius: 6
+              }}
+            />
+            <button onClick={search} disabled={searching} style={{
+              ...btnStyle, padding: '8px 14px', fontSize: 13,
+              background: C.accent, color: C.bg, border: 'none'
+            }}>{searching ? '...' : 'بحث'}</button>
+          </div>
+          <button onClick={refresh} style={{ ...btnStyle, padding: '8px', fontSize: 12 }}>
+            استخدم تحديد الموقع التلقائي
+          </button>
+          {error && <div style={{ color: C.red, fontSize: 12 }}>{error}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function IslamicApp() {
   const [tab, setTab] = useState("prayer");
   const [pos, setPos] = useState(null);
+  const [city, setCity] = useState('');
+  const [status, setStatus] = useState('جاري تحديد الموقع...');
 
-  useEffect(() => {
+  const detectLocation = () => {
+    setStatus('جاري تحديد الموقع...');
+    const tryIp = async () => {
+      try {
+        const res = await fetch('https://ipapi.co/json/');
+        const d = await res.json();
+        if (d.latitude && d.longitude) {
+          setPos({ lat: d.latitude, lon: d.longitude });
+          const name = [d.city, d.country_name].filter(Boolean).join('، ');
+          setCity(name);
+          try { localStorage.setItem('islam_loc', JSON.stringify({ lat: d.latitude, lon: d.longitude, city: name })); } catch (e) {}
+        } else {
+          setStatus('تعذر تحديد الموقع، حدده يدوياً');
+        }
+      } catch (e) {
+        setStatus('تعذر تحديد الموقع، حدده يدوياً');
+      }
+    };
+
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (p) => setPos({ lat: p.coords.latitude, lon: p.coords.longitude }),
-        (err) => console.error(err)
+        async (p) => {
+          const loc = { lat: p.coords.latitude, lon: p.coords.longitude };
+          setPos(loc);
+          try {
+            const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.lat}&lon=${loc.lon}`, {
+              headers: { 'Accept-Language': 'ar' }
+            });
+            const d = await r.json();
+            const a = d.address || {};
+            const name = [a.city || a.town || a.village || a.county, a.country].filter(Boolean).join('، ');
+            setCity(name);
+            try { localStorage.setItem('islam_loc', JSON.stringify({ ...loc, city: name })); } catch (e) {}
+          } catch (e) {
+            setCity(`${loc.lat.toFixed(3)}، ${loc.lon.toFixed(3)}`);
+          }
+        },
+        () => { tryIp(); },
+        { timeout: 5000 }
       );
+    } else {
+      tryIp();
     }
+  };
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('islam_loc');
+      if (saved) {
+        const s = JSON.parse(saved);
+        setPos({ lat: s.lat, lon: s.lon });
+        if (s.city) setCity(s.city);
+        return;
+      }
+    } catch (e) {}
+    detectLocation();
   }, []);
 
   return (
@@ -215,6 +342,9 @@ export default function IslamicApp() {
       </header>
 
       <main style={{ padding: 15, maxWidth: 720, margin: '0 auto' }}>
+        {(tab === 'prayer' || tab === 'qibla') && (
+          <LocationBar pos={pos} setPos={setPos} city={city} setCity={setCity} status={status} refresh={detectLocation} />
+        )}
         {tab === "prayer" && <PrayerTimes pos={pos} />}
         {tab === "quran" && <QuranSection />}
         {tab === "adhkar" && <AdhkarSection />}
