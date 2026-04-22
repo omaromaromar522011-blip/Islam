@@ -84,52 +84,170 @@ const QiblaSection = ({ pos }) => {
   const canvasRef = useRef(null);
   const [angle, setAngle] = useState(0);
   const [heading, setHeading] = useState(0);
+  const [hasOrientation, setHasOrientation] = useState(false);
+  const [distance, setDistance] = useState(0);
+  const [needPermission, setNeedPermission] = useState(false);
 
   useEffect(() => {
     if (pos) {
+      const KAABA = { lat: 21.4225, lon: 39.8262 };
       const φ1 = pos.lat * Math.PI / 180;
       const λ1 = pos.lon * Math.PI / 180;
-      const φ2 = 21.4225 * Math.PI / 180;
-      const λ2 = 39.8262 * Math.PI / 180;
+      const φ2 = KAABA.lat * Math.PI / 180;
+      const λ2 = KAABA.lon * Math.PI / 180;
       const y = Math.sin(λ2 - λ1);
       const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1);
       const qibla = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-      setAngle(Math.round(qibla));
-    }
+      setAngle(qibla);
 
-    const handleMotion = (e) => {
-      if (e.webkitCompassHeading) setHeading(e.webkitCompassHeading);
-      else if (typeof e.alpha === 'number') setHeading(360 - e.alpha);
-    };
-    window.addEventListener('deviceorientation', handleMotion);
-    return () => window.removeEventListener('deviceorientation', handleMotion);
+      const R = 6371;
+      const dφ = (KAABA.lat - pos.lat) * Math.PI / 180;
+      const dλ = (KAABA.lon - pos.lon) * Math.PI / 180;
+      const a = Math.sin(dφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      setDistance(Math.round(R * c));
+    }
   }, [pos]);
 
   useEffect(() => {
-    const ctx = canvasRef.current.getContext('2d');
-    const cx = 135, cy = 135, R = 100;
-    ctx.clearRect(0, 0, 270, 270);
+    const handleMotion = (e) => {
+      let h = null;
+      if (typeof e.webkitCompassHeading === 'number') h = e.webkitCompassHeading;
+      else if (typeof e.alpha === 'number') h = 360 - e.alpha;
+      if (h !== null && !Number.isNaN(h)) {
+        setHeading(h);
+        setHasOrientation(true);
+      }
+    };
+    window.addEventListener('deviceorientationabsolute', handleMotion, true);
+    window.addEventListener('deviceorientation', handleMotion, true);
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      setNeedPermission(true);
+    }
+    return () => {
+      window.removeEventListener('deviceorientationabsolute', handleMotion, true);
+      window.removeEventListener('deviceorientation', handleMotion, true);
+    };
+  }, []);
+
+  const requestPermission = async () => {
+    try {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r === 'granted') setNeedPermission(false);
+    } catch (e) {}
+  };
+
+  const diff = ((angle - heading + 540) % 360) - 180;
+  const absDiff = Math.abs(diff);
+  const aligned = hasOrientation && absDiff < 5;
+  const close = hasOrientation && absDiff < 15;
+  const ringColor = aligned ? '#22c55e' : (close ? C.accent : C.border);
+  const arrowColor = aligned ? '#22c55e' : C.accent;
+
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const cx = 150, cy = 150, R = 120;
+    ctx.clearRect(0, 0, 300, 300);
 
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.strokeStyle = C.border; ctx.lineWidth = 5; ctx.stroke();
+    ctx.strokeStyle = ringColor; ctx.lineWidth = 6; ctx.stroke();
+
+    ctx.fillStyle = C.muted; ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const dirs = [['ش', 0], ['ق', 90], ['ج', 180], ['غ', 270]];
+    dirs.forEach(([t, deg]) => {
+      const r = (((deg - heading) * Math.PI) / 180);
+      const x = cx + Math.sin(r) * (R - 18);
+      const y = cy - Math.cos(r) * (R - 18);
+      ctx.fillStyle = deg === 0 ? C.red : C.muted;
+      ctx.fillText(t, x, y);
+    });
+
+    for (let i = 0; i < 72; i++) {
+      const a = ((i * 5 - heading) * Math.PI) / 180;
+      const inner = R - (i % 6 === 0 ? 8 : 4);
+      const x1 = cx + Math.sin(a) * R;
+      const y1 = cy - Math.cos(a) * R;
+      const x2 = cx + Math.sin(a) * inner;
+      const y2 = cy - Math.cos(a) * inner;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+      ctx.strokeStyle = C.border; ctx.lineWidth = 1; ctx.stroke();
+    }
 
     const nRad = ((angle - heading) * Math.PI) / 180;
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(nRad);
     ctx.beginPath();
-    ctx.moveTo(0, -(R - 20)); ctx.lineTo(12, 10); ctx.lineTo(-12, 10);
+    ctx.moveTo(0, -(R - 30));
+    ctx.lineTo(14, -(R - 60));
+    ctx.lineTo(6, -(R - 60));
+    ctx.lineTo(6, 30);
+    ctx.lineTo(-6, 30);
+    ctx.lineTo(-6, -(R - 60));
+    ctx.lineTo(-14, -(R - 60));
     ctx.closePath();
-    ctx.fillStyle = C.accent; ctx.fill();
+    ctx.fillStyle = arrowColor; ctx.fill();
     ctx.restore();
-  }, [angle, heading]);
+
+    ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.fillStyle = arrowColor; ctx.fill();
+
+    ctx.fillStyle = arrowColor;
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText('🕋', cx + Math.sin(nRad) * (R - 15), cy - Math.cos(nRad) * (R - 15));
+  }, [angle, heading, ringColor, arrowColor]);
 
   return (
     <div style={{ textAlign: 'center', color: C.text }}>
-      <canvas ref={canvasRef} width={270} height={270} />
-      <h2>{angle}°</h2>
-      <p style={{ color: C.muted }}>اتجه نحو الكعبة المشرفة</p>
+      <canvas ref={canvasRef} width={300} height={300} style={{ display: 'block', margin: '0 auto' }} />
+
+      {needPermission && (
+        <button onClick={requestPermission} style={{
+          ...btnStyle, background: C.accent, color: C.bg, border: 'none',
+          padding: '10px 20px', marginTop: 10
+        }}>تفعيل البوصلة</button>
+      )}
+
+      <div style={{
+        marginTop: 16, padding: 16, borderRadius: 14,
+        background: aligned ? 'rgba(34,197,94,0.15)' : C.surface,
+        border: `2px solid ${aligned ? '#22c55e' : C.border}`,
+        transition: 'all .25s'
+      }}>
+        <div style={{
+          fontSize: 16, fontWeight: 'bold',
+          color: aligned ? '#22c55e' : (close ? C.accent : C.muted),
+          marginBottom: 10
+        }}>
+          {!hasOrientation ? '⚠️ جهازك لا يدعم البوصلة، يمكنك الاسترشاد بالزاوية فقط'
+            : aligned ? '✅ أنت تتجه نحو الكعبة'
+            : close ? '↻ اقترب، استمر في الالتفاف'
+            : '↻ التف نحو القبلة'}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <Stat label="اتجاه القبلة" value={`${angle.toFixed(1)}°`} />
+          <Stat label="اتجاهك" value={hasOrientation ? `${heading.toFixed(1)}°` : '—'} />
+          <Stat label="الفرق" value={hasOrientation ? `${absDiff.toFixed(1)}°` : '—'}
+            color={aligned ? '#22c55e' : (close ? C.accent : C.text)} />
+        </div>
+
+        <div style={{ marginTop: 12, color: C.muted, fontSize: 13 }}>
+          المسافة إلى الكعبة المشرفة: <span style={{ color: C.accentLight, fontWeight: 'bold' }}>{distance.toLocaleString('ar-EG')} كم</span>
+        </div>
+      </div>
     </div>
   );
 };
+
+const Stat = ({ label, value, color }) => (
+  <div style={{ background: C.bg, padding: 10, borderRadius: 10, border: `1px solid ${C.border}` }}>
+    <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{label}</div>
+    <div style={{ fontSize: 16, fontWeight: 'bold', color: color || C.text }}>{value}</div>
+  </div>
+);
 
 const DhikrCard = ({ item }) => {
   const [count, setCount] = useState(0);
