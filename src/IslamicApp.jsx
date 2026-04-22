@@ -320,36 +320,175 @@ const PrayerTimes = ({ pos }) => {
 };
 
 const QuranSection = () => {
+  const [view, setView] = useState('mushaf'); // 'mushaf' | 'tafsir'
   const [page, setPage] = useState(1);
   const pageStr = String(page).padStart(3, '0');
+
   return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ marginBottom: 15, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
-        <button onClick={() => setPage(p => Math.min(604, p + 1))} style={btnStyle}>التالي</button>
-        <span style={{ color: C.text }}>صفحة {page} / 604</span>
-        <button onClick={() => setPage(p => Math.max(1, p - 1))} style={btnStyle}>السابق</button>
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, background: C.surface, padding: 4, borderRadius: 12, border: `1px solid ${C.border}` }}>
+        {[
+          { id: 'mushaf', label: '📖 المصحف' },
+          { id: 'tafsir', label: '📚 التفسير الميسّر' }
+        ].map(v => (
+          <button key={v.id} onClick={() => setView(v.id)} style={{
+            flex: 1, padding: '10px 8px', borderRadius: 9, border: 'none', cursor: 'pointer',
+            background: view === v.id ? C.accent : 'transparent',
+            color: view === v.id ? C.bg : C.muted,
+            fontWeight: 'bold', fontSize: 14
+          }}>{v.label}</button>
+        ))}
       </div>
-      <img
-        src={`/quran/${pageStr}.png`}
-        alt={`صفحة ${page} من القرآن الكريم`}
-        style={{ width: '100%', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', background: '#fff' }}
-      />
-      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
-        <span style={{ color: C.muted, fontSize: 13 }}>اذهب إلى صفحة:</span>
-        <input
-          type="number"
-          min={1}
-          max={604}
-          value={page}
-          onChange={e => {
-            const v = parseInt(e.target.value || '1', 10);
-            if (!Number.isNaN(v)) setPage(Math.max(1, Math.min(604, v)));
-          }}
+
+      {view === 'mushaf' && (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ marginBottom: 15, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
+            <button onClick={() => setPage(p => Math.min(604, p + 1))} style={btnStyle}>التالي</button>
+            <span style={{ color: C.text }}>صفحة {page} / 604</span>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} style={btnStyle}>السابق</button>
+          </div>
+          <img
+            src={`/quran/${pageStr}.png`}
+            alt={`صفحة ${page} من القرآن الكريم`}
+            style={{ width: '100%', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', background: '#fff' }}
+          />
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: C.muted, fontSize: 13 }}>اذهب إلى صفحة:</span>
+            <input
+              type="number" min={1} max={604} value={page}
+              onChange={e => {
+                const v = parseInt(e.target.value || '1', 10);
+                if (!Number.isNaN(v)) setPage(Math.max(1, Math.min(604, v)));
+              }}
+              style={{
+                width: 80, padding: '6px 8px', textAlign: 'center',
+                background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {view === 'tafsir' && <TafsirSection />}
+    </div>
+  );
+};
+
+const TafsirSection = () => {
+  const [surahs, setSurahs] = useState(null);
+  const [tafsir, setTafsir] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [surahNum, setSurahNum] = useState(() => {
+    const s = parseInt(localStorage.getItem('islam_tafsir_surah') || '1', 10);
+    return Number.isNaN(s) ? 1 : s;
+  });
+  const [ayahNum, setAyahNum] = useState(() => {
+    const a = parseInt(localStorage.getItem('islam_tafsir_ayah') || '1', 10);
+    return Number.isNaN(a) ? 1 : a;
+  });
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/tafsir/surahs.json').then(r => r.json()),
+      fetch('/tafsir/muyassar.json').then(r => r.json())
+    ]).then(([s, t]) => {
+      setSurahs(s); setTafsir(t); setLoading(false);
+    }).catch(e => { setError(e.message); setLoading(false); });
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('islam_tafsir_surah', String(surahNum));
+  }, [surahNum]);
+  useEffect(() => {
+    localStorage.setItem('islam_tafsir_ayah', String(ayahNum));
+  }, [ayahNum]);
+
+  const currentSurah = surahs && surahs.find(s => s.n === surahNum);
+  const ayahCount = currentSurah ? currentSurah.count : 1;
+  const safeAyah = Math.min(Math.max(1, ayahNum), ayahCount);
+  const text = tafsir && tafsir[surahNum] && tafsir[surahNum][safeAyah];
+
+  const goPrev = () => {
+    if (safeAyah > 1) setAyahNum(safeAyah - 1);
+    else if (surahNum > 1) {
+      const prev = surahs.find(s => s.n === surahNum - 1);
+      setSurahNum(surahNum - 1);
+      setAyahNum(prev ? prev.count : 1);
+    }
+  };
+  const goNext = () => {
+    if (safeAyah < ayahCount) setAyahNum(safeAyah + 1);
+    else if (surahNum < 114) { setSurahNum(surahNum + 1); setAyahNum(1); }
+  };
+
+  if (loading) {
+    return <div style={{ textAlign: 'center', color: C.muted, padding: 30 }}>جاري تحميل التفسير...</div>;
+  }
+  if (error) {
+    return <div style={{ textAlign: 'center', color: C.red, padding: 20 }}>تعذر تحميل التفسير: {error}</div>;
+  }
+
+  return (
+    <div>
+      <div style={{
+        background: C.surface, padding: 14, borderRadius: 12,
+        border: `1px solid ${C.border}`, marginBottom: 12
+      }}>
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 6 }}>السورة</div>
+        <select value={surahNum} onChange={e => { setSurahNum(parseInt(e.target.value, 10)); setAyahNum(1); }}
           style={{
-            width: 80, padding: '6px 8px', textAlign: 'center',
-            background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6
-          }}
-        />
+            width: '100%', padding: 10, background: C.bg, color: C.text,
+            border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 15,
+            fontFamily: 'inherit', marginBottom: 12, textAlignLast: 'right'
+          }}>
+          {surahs.map(s => (
+            <option key={s.n} value={s.n}>{s.n}. {s.name} ({s.count} آيات)</option>
+          ))}
+        </select>
+
+        <div style={{ fontSize: 13, color: C.muted, marginBottom: 6 }}>رقم الآية (١ — {ayahCount})</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={goPrev} style={{
+            background: C.bg, color: C.accent, border: `1px solid ${C.border}`,
+            padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold'
+          }}>‹ السابقة</button>
+          <input type="number" min={1} max={ayahCount} value={safeAyah}
+            onChange={e => {
+              const v = parseInt(e.target.value || '1', 10);
+              if (!Number.isNaN(v)) setAyahNum(Math.max(1, Math.min(ayahCount, v)));
+            }}
+            style={{
+              flex: 1, padding: 10, textAlign: 'center', fontSize: 15,
+              background: C.bg, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8
+            }} />
+          <button onClick={goNext} style={{
+            background: C.bg, color: C.accent, border: `1px solid ${C.border}`,
+            padding: '8px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold'
+          }}>التالية ›</button>
+        </div>
+      </div>
+
+      <div style={{
+        background: `linear-gradient(135deg, ${C.surface} 0%, rgba(196,164,89,0.05) 100%)`,
+        padding: 18, borderRadius: 14, border: `1px solid ${C.accent}`
+      }}>
+        <div style={{
+          textAlign: 'center', color: C.accentLight, fontSize: 16, fontWeight: 'bold',
+          marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${C.border}`
+        }}>
+          {currentSurah && currentSurah.name} — الآية {safeAyah}
+        </div>
+        <div style={{
+          color: C.text, fontSize: 17, lineHeight: 2.1, textAlign: 'right',
+          fontFamily: 'Amiri, "Traditional Arabic", serif'
+        }}>
+          {text || 'لا يتوفر تفسير لهذه الآية'}
+        </div>
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.border}`,
+          fontSize: 12, color: C.muted, textAlign: 'center' }}>
+          التفسير الميسّر — مجمع الملك فهد لطباعة المصحف الشريف
+        </div>
       </div>
     </div>
   );
