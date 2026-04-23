@@ -385,9 +385,62 @@ const PrayerTimes = ({ pos }) => {
 };
 
 const QuranSection = () => {
-  const [view, setView] = useState('mushaf'); // 'mushaf' | 'tafsir'
-  const [page, setPage] = useState(1);
+  const [view, setView] = useState('mushaf');
+  const [page, setPage] = useState(() => {
+    const p = parseInt(localStorage.getItem('islam_quran_page') || '1', 10);
+    return Number.isNaN(p) ? 1 : Math.max(1, Math.min(604, p));
+  });
+  const [flipDir, setFlipDir] = useState(0);
+  const [ayahPicker, setAyahPicker] = useState(null);
+  const [pagesMap, setPagesMap] = useState(null);
+  const [data, setData] = useState(null);
   const pageStr = String(page).padStart(3, '0');
+
+  useEffect(() => { try { localStorage.setItem('islam_quran_page', String(page)); } catch {} }, [page]);
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/quran/pages.json').then(r => r.json()),
+      fetch('/tafsir/surahs.json').then(r => r.json()),
+      fetch('/tafsir/muyassar.json').then(r => r.json()),
+      fetch('/tafsir/quran.json').then(r => r.json())
+    ]).then(([pages, surahs, tafsir, quran]) => {
+      setPagesMap(pages);
+      setData({ surahs, tafsir, quran });
+    }).catch(() => {});
+  }, []);
+
+  const goNext = () => { if (page < 604) { setFlipDir(-1); setPage(p => Math.min(604, p + 1)); } };
+  const goPrev = () => { if (page > 1) { setFlipDir(1); setPage(p => Math.max(1, p - 1)); } };
+
+  // Touch swipe handlers — Arabic mushaf: swipe LEFT (finger goes left) = next page
+  const touchRef = useRef({ x: 0, y: 0, t: 0, longTimer: null, moved: false });
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now(), moved: false, longTimer: null };
+    touchRef.current.longTimer = setTimeout(() => {
+      if (!touchRef.current.moved && pagesMap && pagesMap[page]) {
+        setAyahPicker({ page });
+      }
+    }, 550);
+  };
+  const onTouchMove = (e) => {
+    const t = e.touches[0];
+    if (Math.abs(t.clientX - touchRef.current.x) > 10 || Math.abs(t.clientY - touchRef.current.y) > 10) {
+      touchRef.current.moved = true;
+      clearTimeout(touchRef.current.longTimer);
+    }
+  };
+  const onTouchEnd = (e) => {
+    clearTimeout(touchRef.current.longTimer);
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchRef.current.x;
+    const dy = t.clientY - touchRef.current.y;
+    const dt = Date.now() - touchRef.current.t;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 600) {
+      if (dx < 0) goNext(); else goPrev();
+    }
+  };
 
   return (
     <div>
@@ -407,16 +460,48 @@ const QuranSection = () => {
 
       {view === 'mushaf' && (
         <div style={{ textAlign: 'center' }}>
-          <div style={{ marginBottom: 15, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => setPage(p => Math.min(604, p + 1))} style={btnStyle}>التالي</button>
-            <span style={{ color: C.text }}>صفحة {page} / 604</span>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} style={btnStyle}>السابق</button>
+          <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <button onClick={goPrev} disabled={page <= 1} style={{ ...btnStyle, opacity: page <= 1 ? 0.4 : 1 }}>← السابق</button>
+            <div style={{ color: C.accentLight, fontSize: 14, fontWeight: 'bold' }}>صفحة {page} / 604</div>
+            <button onClick={goNext} disabled={page >= 604} style={{ ...btnStyle, opacity: page >= 604 ? 0.4 : 1 }}>التالي →</button>
           </div>
-          <img
-            src={`/quran/${pageStr}.png`}
-            alt={`صفحة ${page} من القرآن الكريم`}
-            style={{ width: '100%', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.5)', background: '#fff' }}
-          />
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
+            ← اسحب للانتقال للصفحة التالية • اضغط مطوّلاً على الصفحة لاختيار آية وعرض تفسيرها
+          </div>
+
+          <div
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+            onContextMenu={(e) => { e.preventDefault(); if (pagesMap && pagesMap[page]) setAyahPicker({ page }); }}
+            style={{
+              marginLeft: -15, marginRight: -15,
+              overflow: 'hidden', borderRadius: 8,
+              background: '#fff',
+              boxShadow: '0 6px 30px rgba(0,0,0,0.6)',
+              touchAction: 'pan-y',
+              userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'
+            }}
+          >
+            <img
+              key={page}
+              src={`/quran/${pageStr}.png`}
+              alt={`صفحة ${page} من القرآن الكريم`}
+              draggable={false}
+              style={{
+                display: 'block', width: '100%', height: 'auto',
+                maxHeight: '85vh', objectFit: 'contain',
+                animation: `pageFlip${flipDir < 0 ? 'L' : 'R'} 0.28s ease-out`,
+                pointerEvents: 'none'
+              }}
+            />
+          </div>
+
+          <style>{`
+            @keyframes pageFlipL { from { transform: translateX(15%); opacity: 0.3; } to { transform: translateX(0); opacity: 1; } }
+            @keyframes pageFlipR { from { transform: translateX(-15%); opacity: 0.3; } to { transform: translateX(0); opacity: 1; } }
+          `}</style>
+
           <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
             <span style={{ color: C.muted, fontSize: 13 }}>اذهب إلى صفحة:</span>
             <input
@@ -435,6 +520,98 @@ const QuranSection = () => {
       )}
 
       {view === 'tafsir' && <TafsirSection />}
+
+      {ayahPicker && data && pagesMap && (
+        <AyahTafsirModal
+          page={ayahPicker.page}
+          pagesMap={pagesMap}
+          data={data}
+          onClose={() => setAyahPicker(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+const AyahTafsirModal = ({ page, pagesMap, data, onClose }) => {
+  const ayahs = pagesMap[page] || [];
+  const [sel, setSel] = useState(ayahs[0] || null);
+  const surah = sel && data.surahs.find(s => s.n === sel.s);
+  const ayahText = sel && data.quran[sel.s] && data.quran[sel.s][sel.a];
+  const tafsirText = sel && data.tafsir[sel.s] && data.tafsir[sel.s][sel.a];
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+      zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      padding: 0
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.surface, width: '100%', maxWidth: 720,
+        maxHeight: '85vh', borderRadius: '16px 16px 0 0',
+        border: `1px solid ${C.border}`, overflow: 'auto',
+        animation: 'slideUp 0.25s ease-out'
+      }}>
+        <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
+        <div style={{
+          position: 'sticky', top: 0, background: C.surface, padding: '14px 16px',
+          borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+        }}>
+          <div style={{ color: C.accentLight, fontWeight: 'bold' }}>صفحة {page} — اختر آية</div>
+          <button onClick={onClose} style={{
+            background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 22
+          }}>✕</button>
+        </div>
+
+        <div style={{ padding: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {ayahs.map((it, i) => {
+              const isSel = sel && sel.s === it.s && sel.a === it.a;
+              const sn = data.surahs.find(s => s.n === it.s);
+              return (
+                <button key={i} onClick={() => setSel(it)} style={{
+                  background: isSel ? C.accent : C.bg,
+                  color: isSel ? C.bg : C.accentLight,
+                  border: `1px solid ${isSel ? C.accent : C.border}`,
+                  padding: '6px 10px', borderRadius: 8, cursor: 'pointer',
+                  fontSize: 12, fontWeight: 'bold'
+                }}>{(sn ? sn.name.replace('سُورَةُ ', '').replace('ٱ', 'ا') : it.s)} • {it.a}</button>
+              );
+            })}
+          </div>
+
+          {sel && (
+            <>
+              <div style={{
+                background: 'rgba(196,164,89,0.08)', border: `1px solid ${C.border}`,
+                borderRadius: 12, padding: 16, marginBottom: 12
+              }}>
+                <div style={{ fontSize: 11, color: C.accent, marginBottom: 8, textAlign: 'center' }}>
+                  {surah ? surah.name : ''} — الآية {sel.a}
+                </div>
+                <div style={{
+                  fontSize: 22, lineHeight: 2.2, textAlign: 'center',
+                  fontFamily: '"Amiri", "Scheherazade", serif', color: C.text
+                }}>
+                  {ayahText || ''} <span style={{ color: C.accent }}>﴿{sel.a}﴾</span>
+                </div>
+              </div>
+
+              <div style={{
+                background: C.bg, border: `1px solid ${C.border}`,
+                borderRadius: 12, padding: 16
+              }}>
+                <div style={{ fontSize: 12, color: C.accent, marginBottom: 8, fontWeight: 'bold' }}>
+                  📚 التفسير الميسّر
+                </div>
+                <div style={{ fontSize: 15, lineHeight: 1.9, color: C.text }}>
+                  {tafsirText || 'لا يتوفر تفسير لهذه الآية'}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
