@@ -43,6 +43,62 @@ const DEFAULT_ADHAN_SETTINGS = {
   prayers: { fajr: true, dhuhr: true, asr: true, maghrib: true, isha: true }
 };
 
+const HIJRI_MONTHS_AR = [
+  'محرم', 'صفر', 'ربيع الأول', 'ربيع الآخر', 'جمادى الأولى', 'جمادى الآخرة',
+  'رجب', 'شعبان', 'رمضان', 'شوال', 'ذو القعدة', 'ذو الحجة'
+];
+
+function HijriDateBanner({ now }) {
+  const hijri = useMemo(() => {
+    try {
+      const parts = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-arab', {
+        weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric'
+      }).formatToParts(now);
+      const get = (t) => (parts.find(p => p.type === t) || {}).value || '';
+      const monthNum = parseInt(get('month').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)), 10);
+      const monthName = HIJRI_MONTHS_AR[monthNum - 1] || get('month');
+      return {
+        weekday: get('weekday'),
+        day: get('day'),
+        month: monthName,
+        year: get('year')
+      };
+    } catch {
+      return null;
+    }
+  }, [now]);
+
+  const gregorian = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat('ar-EG', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      }).format(now);
+    } catch { return ''; }
+  }, [now]);
+
+  if (!hijri) return null;
+  return (
+    <div style={{
+      background: C.surface, border: `1px solid ${C.border}`,
+      borderRadius: 12, padding: '12px 14px', marginBottom: 12,
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>
+          التقويم الهجري — أم القرى
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 'bold', color: C.accentLight }}>
+          {hijri.weekday}، {hijri.day} {hijri.month} {hijri.year} هـ
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+          {gregorian}
+        </div>
+      </div>
+      <div style={{ fontSize: 28, color: C.accent, opacity: 0.6 }}>☪</div>
+    </div>
+  );
+}
+
 const PrayerTimes = ({ pos }) => {
   const [times, setTimes] = useState(null);
   const [now, setNow] = useState(new Date());
@@ -168,6 +224,9 @@ const PrayerTimes = ({ pos }) => {
   return (
     <div>
       <audio ref={audioRef} preload="none" />
+
+      {/* Hijri date banner — Umm Al-Qura calendar */}
+      <HijriDateBanner now={now} />
 
       {/* Next prayer banner */}
       {nextPrayer && (
