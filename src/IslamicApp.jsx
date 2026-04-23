@@ -26,9 +26,9 @@ const ADHAN_VOICES = [
   { id: 'azan11', label: 'أذان رقم ١١', file: '/adhan/azan11.mp3' },
   { id: 'azan12', label: 'أذان رقم ١٢', file: '/adhan/azan12.mp3' },
   { id: 'azan13', label: 'أذان رقم ١٣', file: '/adhan/azan13.mp3' },
-  { id: 'fajr', label: 'أذان الفجر — الحرم المكي (مع تثويب)', file: '/adhan/fajr.mp3' },
-  { id: 'fajr2', label: 'أذان الفجر — رواية ٢ (مع تثويب)', file: '/adhan/fajr2.mp3' },
-  { id: 'fajr3', label: 'أذان الفجر — رواية ٣ (مع تثويب)', file: '/adhan/fajr3.mp3' }
+  { id: 'fajr', label: 'أذان الفجر — الشيخ علي ملا (الحرم المكي)', file: '/adhan/fajr.mp3' },
+  { id: 'fajr2', label: 'أذان الفجر — الشيخ مشاري العفاسي', file: '/adhan/fajr2.mp3' },
+  { id: 'fajr3', label: 'أذان الفجر — الشيخ محمد بن ماجد', file: '/adhan/fajr3.mp3' }
 ];
 
 const PRAYER_NAMES = {
