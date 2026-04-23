@@ -394,7 +394,46 @@ const QuranSection = () => {
   const [ayahPicker, setAyahPicker] = useState(null);
   const [pagesMap, setPagesMap] = useState(null);
   const [data, setData] = useState(null);
+  const [reciter, setReciter] = useState(() => localStorage.getItem('islam_reciter') || 'ar.alafasy');
+  const [audioState, setAudioState] = useState('idle'); // 'idle' | 'loading' | 'playing'
+  const audioRef = useRef(null);
   const pageStr = String(page).padStart(3, '0');
+
+  const RECITERS = [
+    { id: 'ar.alafasy', name: 'مشاري العفاسي' },
+    { id: 'ar.husary', name: 'محمود خليل الحصري' },
+    { id: 'ar.minshawi', name: 'محمد صديق المنشاوي' },
+    { id: 'ar.abdurrahmaansudais', name: 'عبدالرحمن السديس' },
+    { id: 'ar.abdulbasitmurattal', name: 'عبدالباسط عبدالصمد' },
+    { id: 'ar.muhammadayyoub', name: 'محمد أيوب' },
+    { id: 'ar.hudhaify', name: 'علي الحذيفي' }
+  ];
+
+  useEffect(() => { try { localStorage.setItem('islam_reciter', reciter); } catch {} }, [reciter]);
+
+  const currentSurahNum = pagesMap && pagesMap[page] && pagesMap[page][0] ? pagesMap[page][0].s : null;
+  const currentSurah = currentSurahNum && data ? data.surahs.find(s => s.n === currentSurahNum) : null;
+
+  const stopAudio = () => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+    setAudioState('idle');
+  };
+
+  const playSurah = () => {
+    if (!currentSurahNum) return;
+    if (audioState === 'playing') { stopAudio(); return; }
+    const url = `https://cdn.islamic.network/quran/audio-surah/128/${reciter}/${currentSurahNum}.mp3`;
+    if (!audioRef.current) audioRef.current = new Audio();
+    audioRef.current.src = url;
+    setAudioState('loading');
+    audioRef.current.oncanplay = () => setAudioState('playing');
+    audioRef.current.onended = () => setAudioState('idle');
+    audioRef.current.onerror = () => { setAudioState('idle'); alert('تعذّر تشغيل التلاوة، حاول قارئاً آخر'); };
+    audioRef.current.play().catch(() => setAudioState('idle'));
+  };
+
+  useEffect(() => () => { if (audioRef.current) audioRef.current.pause(); }, []);
+  useEffect(() => { stopAudio(); }, [reciter]);
 
   useEffect(() => { try { localStorage.setItem('islam_quran_page', String(page)); } catch {} }, [page]);
 
@@ -438,7 +477,7 @@ const QuranSection = () => {
     const dy = t.clientY - touchRef.current.y;
     const dt = Date.now() - touchRef.current.t;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 600) {
-      if (dx < 0) goNext(); else goPrev();
+      if (dx > 0) goNext(); else goPrev();
     }
   };
 
@@ -460,13 +499,38 @@ const QuranSection = () => {
 
       {view === 'mushaf' && (
         <div style={{ textAlign: 'center' }}>
+          <div style={{
+            background: C.surface, border: `1px solid ${C.border}`,
+            borderRadius: 12, padding: 10, marginBottom: 10,
+            display: 'flex', alignItems: 'center', gap: 8
+          }}>
+            <button onClick={playSurah} disabled={!currentSurahNum || audioState === 'loading'} style={{
+              background: audioState === 'playing' ? C.red : C.accent,
+              color: audioState === 'playing' ? '#fff' : C.bg,
+              border: 'none', padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
+              fontWeight: 'bold', fontSize: 14, minWidth: 90
+            }}>
+              {audioState === 'loading' ? '... جاري' : audioState === 'playing' ? '⏹ إيقاف' : '▶ تلاوة'}
+            </button>
+            <select value={reciter} onChange={e => setReciter(e.target.value)} style={{
+              flex: 1, background: C.bg, color: C.text, border: `1px solid ${C.border}`,
+              padding: '10px', borderRadius: 10, fontSize: 13, fontFamily: 'inherit'
+            }}>
+              {RECITERS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+          {currentSurah && (
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
+              السورة الحالية: <span style={{ color: C.accentLight, fontWeight: 'bold' }}>{currentSurah.name}</span>
+            </div>
+          )}
           <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <button onClick={goPrev} disabled={page <= 1} style={{ ...btnStyle, opacity: page <= 1 ? 0.4 : 1 }}>← السابق</button>
+            <button onClick={goPrev} disabled={page <= 1} style={{ ...btnStyle, opacity: page <= 1 ? 0.4 : 1 }}>→ السابق</button>
             <div style={{ color: C.accentLight, fontSize: 14, fontWeight: 'bold' }}>صفحة {page} / 604</div>
-            <button onClick={goNext} disabled={page >= 604} style={{ ...btnStyle, opacity: page >= 604 ? 0.4 : 1 }}>التالي →</button>
+            <button onClick={goNext} disabled={page >= 604} style={{ ...btnStyle, opacity: page >= 604 ? 0.4 : 1 }}>التالي ←</button>
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
-            ← اسحب للانتقال للصفحة التالية • اضغط مطوّلاً على الصفحة لاختيار آية وعرض تفسيرها
+            اسحب يميناً للصفحة التالية أو يساراً للسابقة • اضغط مطوّلاً على الصفحة لعرض تفسير الآيات
           </div>
 
           <div
@@ -972,9 +1036,13 @@ const SadaqahSection = () => {
     try { return JSON.parse(localStorage.getItem('islam_shares') || '{}'); }
     catch { return {}; }
   });
-  const [duaList, setDuaList] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('islam_duas') || '[]'); }
-    catch { return []; }
+  const [duaList, setDuaList] = useState([]);
+  const [duasLoading, setDuasLoading] = useState(true);
+  const [duasError, setDuasError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [duaCounts, setDuaCounts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('islam_dua_counts') || '{}'); }
+    catch { return {}; }
   });
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
@@ -986,11 +1054,31 @@ const SadaqahSection = () => {
     localStorage.setItem('islam_shares', JSON.stringify(shareCounts));
   }, [shareCounts]);
   useEffect(() => {
-    localStorage.setItem('islam_duas', JSON.stringify(duaList));
-  }, [duaList]);
+    localStorage.setItem('islam_dua_counts', JSON.stringify(duaCounts));
+  }, [duaCounts]);
+
+  const loadDuas = async () => {
+    setDuasLoading(true); setDuasError(null);
+    try {
+      const r = await fetch('/api/duas', { cache: 'no-store' });
+      if (!r.ok) throw new Error('http_' + r.status);
+      const j = await r.json();
+      setDuaList(Array.isArray(j.duas) ? j.duas : []);
+    } catch (e) {
+      setDuasError('تعذّر تحميل قائمة الدعاء');
+    } finally {
+      setDuasLoading(false);
+    }
+  };
+  useEffect(() => { loadDuas(); }, []);
+  useEffect(() => {
+    if (view !== 'duas') return;
+    const t = setInterval(loadDuas, 30000);
+    return () => clearInterval(t);
+  }, [view]);
 
   const totalShares = Object.values(shareCounts).reduce((a, b) => a + b, 0);
-  const totalDuas = duaList.reduce((a, p) => a + (p.count || 0), 0);
+  const totalDuas = Object.values(duaCounts).reduce((a, b) => a + b, 0);
 
   const shareItem = async (item) => {
     const text = item.text + (item.url ? '' : '');
@@ -1018,23 +1106,30 @@ const SadaqahSection = () => {
     window.open(item.url, '_blank');
   };
 
-  const addDua = () => {
+  const addDua = async () => {
     const name = newName.trim();
-    if (!name) return;
-    setDuaList(prev => [{
-      id: Date.now(), name, reason: newReason, note: newNote.trim(), count: 0
-    }, ...prev]);
-    setNewName(''); setNewNote(''); setNewReason('general');
-    setShowAdd(false);
+    if (!name || submitting) return;
+    setSubmitting(true);
+    try {
+      const r = await fetch('/api/duas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, reason: newReason, note: newNote.trim() })
+      });
+      if (r.status === 429) { alert('انتظر دقيقة قبل إضافة اسم آخر'); return; }
+      if (!r.ok) throw new Error('http_' + r.status);
+      setNewName(''); setNewNote(''); setNewReason('general');
+      setShowAdd(false);
+      await loadDuas();
+    } catch (e) {
+      alert('تعذّر حفظ الاسم، حاول مرة أخرى');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const incDua = (id) => {
-    setDuaList(prev => prev.map(p => p.id === id ? { ...p, count: (p.count || 0) + 1 } : p));
-  };
-
-  const delDua = (id) => {
-    if (!confirm('هل تريد حذف هذا الاسم من القائمة؟')) return;
-    setDuaList(prev => prev.filter(p => p.id !== id));
+    setDuaCounts(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
   };
 
   const shareDua = (person) => {
@@ -1185,33 +1280,55 @@ const SadaqahSection = () => {
                   resize: 'vertical', fontFamily: 'inherit'
                 }}
               />
-              <button onClick={addDua} style={{
+              <button onClick={addDua} disabled={submitting || !newName.trim()} style={{
                 width: '100%', padding: 12, background: C.accent, color: C.bg,
-                border: 'none', borderRadius: 10, cursor: 'pointer',
+                border: 'none', borderRadius: 10,
+                cursor: submitting ? 'wait' : 'pointer',
+                opacity: (submitting || !newName.trim()) ? 0.5 : 1,
                 fontSize: 14, fontWeight: 'bold'
-              }}>حفظ</button>
+              }}>{submitting ? '... جاري الحفظ' : 'حفظ ومشاركة مع الجميع'}</button>
             </div>
           )}
 
-          {duaList.length === 0 ? (
+          <div style={{
+            background: 'rgba(196,164,89,0.06)', border: `1px solid ${C.border}`,
+            padding: 10, borderRadius: 10, marginBottom: 12, fontSize: 12,
+            color: C.muted, lineHeight: 1.7, textAlign: 'center'
+          }}>
+            هذه قائمة مشتركة — كل اسم تضيفه يظهر لجميع المستخدمين، فيدعو لهم إخوانك في كل مكان
+          </div>
+
+          {duasLoading ? (
+            <div style={{ textAlign: 'center', color: C.muted, padding: 30 }}>... جاري التحميل</div>
+          ) : duasError ? (
+            <div style={{ textAlign: 'center', color: C.red, padding: 20 }}>
+              {duasError}
+              <button onClick={loadDuas} style={{
+                display: 'block', margin: '12px auto 0', background: C.accent,
+                color: C.bg, border: 'none', padding: '8px 16px', borderRadius: 8,
+                cursor: 'pointer', fontWeight: 'bold'
+              }}>إعادة المحاولة</button>
+            </div>
+          ) : duaList.length === 0 ? (
             <div style={{
               background: C.surface, padding: 30, borderRadius: 14,
               border: `1px dashed ${C.border}`, textAlign: 'center', color: C.muted
             }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>🤲</div>
               <div style={{ fontSize: 14, lineHeight: 1.7 }}>
-                أضف أسماء من تحب من الأهل والأصدقاء<br />
-                ليذكّرك التطبيق بالدعاء لهم
+                لا توجد أسماء بعد<br />
+                كن أول من يضيف اسم من يحب
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {duaList.map(p => {
                 const r = REASONS.find(x => x.id === p.reason) || REASONS[5];
+                const myCount = duaCounts[p.id] || 0;
                 return (
                   <div key={p.id} style={{
                     background: C.surface, padding: 14, borderRadius: 14,
-                    border: `1px solid ${p.count > 0 ? C.accent : C.border}`
+                    border: `1px solid ${myCount > 0 ? C.accent : C.border}`
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                       <div style={{ flex: 1 }}>
@@ -1230,7 +1347,7 @@ const SadaqahSection = () => {
                         background: C.bg, color: C.accent, padding: '6px 12px',
                         borderRadius: 12, fontSize: 13, fontWeight: 'bold',
                         border: `1px solid ${C.border}`, minWidth: 50, textAlign: 'center'
-                      }}>{p.count}</div>
+                      }}>{myCount}</div>
                     </div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => incDua(p.id)} style={{
@@ -1243,11 +1360,6 @@ const SadaqahSection = () => {
                         padding: '10px', borderRadius: 10, cursor: 'pointer',
                         fontWeight: 'bold', fontSize: 14
                       }}>↗</button>
-                      <button onClick={() => delDua(p.id)} style={{
-                        background: 'transparent', color: C.red, border: `1px solid ${C.border}`,
-                        padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
-                        fontSize: 14
-                      }}>🗑</button>
                     </div>
                   </div>
                 );
