@@ -1403,7 +1403,7 @@ const DhikrCard = ({ item }) => {
               background: done ? C.accent : C.bg,
               color: done ? C.bg : C.accent,
               border: `1px solid ${C.accent}`,
-              padding: '6px 18px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold'
+              padding: '6px 18px', bor8derRadius: 8, cursor: 'pointer', fontWeight: 'bold'
             }}
           >+1</button>
         </div>
@@ -1708,8 +1708,7 @@ export default function IslamicApp() {
   );
 }
 
-const btnStyle = {
-  background: C.surface,
+const btnStyle = {  background: C.surface,
   color: C.accent,
   border: `1px solid ${C.border}`,
   padding: '6px 16px',
