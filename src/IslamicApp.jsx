@@ -38,6 +38,7 @@ const PRAYER_NAMES = {
 
 const DEFAULT_ADHAN_SETTINGS = {
   enabled: false,
+  notify: true,
   voice: 'makkah',
   fajrVoice: 'fajr',
   prayers: { fajr: true, dhuhr: true, asr: true, maghrib: true, isha: true }
@@ -140,7 +141,59 @@ const PrayerTimes = ({ pos }) => {
     return () => clearInterval(id);
   }, []);
 
-  // Adhan checker
+  // Trigger an adhan: play audio + show notification
+  const triggerAdhan = async (prayerName) => {
+    const s = settingsRef.current;
+    const voiceId = prayerName === 'fajr' ? (s.fajrVoice || s.voice) : s.voice;
+    const voice = ADHAN_VOICES.find(v => v.id === voiceId) || ADHAN_VOICES[0];
+    if (audioRef.current) {
+      try {
+        audioRef.current.src = voice.file;
+        audioRef.current.muted = false;
+        audioRef.current.volume = 1;
+        await audioRef.current.play();
+      } catch (e) { console.warn('Adhan audio blocked:', e); }
+    }
+    if (s.notify && 'Notification' in window && Notification.permission === 'granted') {
+      const title = 'حان وقت الصلاة';
+      const body = `حان الآن وقت ${PRAYER_NAMES[prayerName]} — أقم الصلاة`;
+      try {
+        const reg = await (navigator.serviceWorker?.ready || Promise.resolve(null));
+        if (reg && reg.active) {
+          reg.active.postMessage({ type: 'show-prayer-notification', title, body, tag: 'prayer-' + prayerName });
+        } else {
+          new Notification(title, { body, tag: 'prayer-' + prayerName, icon: '/icon.svg', requireInteraction: true, lang: 'ar', dir: 'rtl' });
+        }
+      } catch {}
+    }
+    if (navigator.vibrate) { try { navigator.vibrate([400, 200, 400, 200, 400]); } catch {} }
+  };
+
+  // Schedule the next prayer with a precise setTimeout (re-armed when times/settings change)
+  useEffect(() => {
+    if (!times || !settings.enabled) return;
+    const order = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
+    const nowMs = Date.now();
+    let target = null;
+    for (const p of order) {
+      if (!settings.prayers[p]) continue;
+      const tMs = times[p].getTime();
+      if (tMs > nowMs + 500) { target = { name: p, at: tMs }; break; }
+    }
+    if (!target) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const delay = Math.min(target.at - nowMs, 2_000_000_000);
+    const id = setTimeout(() => {
+      const key = `${target.name}_${today}`;
+      if (!playedRef.current[key]) {
+        playedRef.current[key] = true;
+        triggerAdhan(target.name);
+      }
+    }, delay);
+    return () => clearTimeout(id);
+  }, [times, settings.enabled, settings.notify, settings.voice, settings.fajrVoice, settings.prayers.fajr, settings.prayers.dhuhr, settings.prayers.asr, settings.prayers.maghrib, settings.prayers.isha]);
+
+  // Safety net: also poll every 20s in case the device slept past the timeout
   useEffect(() => {
     const check = () => {
       const t = timesRef.current;
@@ -153,19 +206,14 @@ const PrayerTimes = ({ pos }) => {
         const key = `${p}_${today}`;
         if (playedRef.current[key]) return;
         const diff = nowMs - t[p].getTime();
-        if (diff >= 0 && diff < 60_000) {
+        if (diff >= 0 && diff < 5 * 60_000) {
           playedRef.current[key] = true;
-          const voiceId = p === 'fajr' ? (s.fajrVoice || s.voice) : s.voice;
-          const voice = ADHAN_VOICES.find(v => v.id === voiceId) || ADHAN_VOICES[0];
-          if (audioRef.current) {
-            audioRef.current.src = voice.file;
-            audioRef.current.play().catch(e => console.warn('Adhan play blocked:', e));
-          }
+          triggerAdhan(p);
         }
       });
     };
     check();
-    const id = setInterval(check, 15_000);
+    const id = setInterval(check, 20_000);
     return () => clearInterval(id);
   }, []);
 
@@ -179,7 +227,22 @@ const PrayerTimes = ({ pos }) => {
       audioRef.current.currentTime = 0;
       audioRef.current.muted = false;
       setAudioUnlocked(true);
-      setSettings(s => ({ ...s, enabled: true }));
+
+      let notifyOk = settings.notify;
+      if ('Notification' in window) {
+        try {
+          if (Notification.permission === 'default') {
+            const perm = await Notification.requestPermission();
+            notifyOk = perm === 'granted';
+          } else {
+            notifyOk = Notification.permission === 'granted' && settings.notify;
+          }
+        } catch { notifyOk = false; }
+      } else {
+        notifyOk = false;
+      }
+
+      setSettings(s => ({ ...s, enabled: true, notify: notifyOk }));
     } catch (e) {
       alert('لم نتمكن من تفعيل الصوت. يرجى السماح بتشغيل الصوت من إعدادات المتصفح.');
     }
@@ -278,7 +341,7 @@ const PrayerTimes = ({ pos }) => {
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <span style={{ fontWeight: 'bold' }}>تشغيل الأذان عند موعد الصلاة</span>
             <button onClick={() => {
               if (settings.enabled) setSettings(s => ({ ...s, enabled: false }));
@@ -295,6 +358,39 @@ const PrayerTimes = ({ pos }) => {
               }} />
             </button>
           </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <span style={{ fontWeight: 'bold' }}>إشعار على الشاشة عند الأذان</span>
+            <button onClick={async () => {
+              if (settings.notify) { setSettings(s => ({ ...s, notify: false })); return; }
+              if ('Notification' in window) {
+                let perm = Notification.permission;
+                if (perm === 'default') perm = await Notification.requestPermission();
+                if (perm === 'granted') setSettings(s => ({ ...s, notify: true }));
+                else alert('يرجى السماح بالإشعارات من إعدادات المتصفح');
+              }
+            }} style={{
+              width: 56, height: 30, borderRadius: 15, border: 'none', cursor: 'pointer',
+              background: settings.notify ? '#22c55e' : C.border,
+              position: 'relative', transition: 'background .2s'
+            }}>
+              <div style={{
+                position: 'absolute', top: 3, [settings.notify ? 'left' : 'right']: 3,
+                width: 24, height: 24, borderRadius: '50%', background: '#fff',
+                transition: 'all .2s'
+              }} />
+            </button>
+          </div>
+
+          {settings.enabled && (
+            <div style={{
+              background: 'rgba(34,197,94,0.07)', border: `1px solid rgba(34,197,94,0.3)`,
+              padding: 12, borderRadius: 10, marginBottom: 14,
+              fontSize: 12, color: '#a3e9b6', lineHeight: 1.7
+            }}>
+              ✓ الأذان مفعّل. للحصول على إشعارات أفضل على الموبايل: افتح القائمة في المتصفح ثم اختر "إضافة إلى الشاشة الرئيسية" أو "تثبيت التطبيق". مع التطبيق المثبت يصلك الأذان حتى لو كانت الشاشة مغلقة في معظم الأحيان.
+            </div>
+          )}
 
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>صوت الأذان</div>
@@ -1708,10 +1804,11 @@ export default function IslamicApp() {
   );
 }
 
-const btnStyle = {  background: C.surface,
+const btnStyle = {
+  background: C.surface,
   color: C.accent,
   border: `1px solid ${C.border}`,
   padding: '6px 16px',
   borderRadius: 6,
   cursor: 'pointer'
-
+};

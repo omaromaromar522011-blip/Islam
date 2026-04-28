@@ -73,7 +73,7 @@ if (process.env.NODE_ENV === 'production') {
       }
     }
   }));
-  app.get('*', (req, res) => res.sendFile(path.join(distDir, 'index.html')));
+  app.use((req, res) => res.sendFile(path.join(distDir, 'index.html')));
 }
 
 const PORT = process.env.NODE_ENV === 'production' ? (process.env.PORT || 5000) : 3001;
