@@ -2,15 +2,21 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as adhan from 'adhan';
 
 const C = {
-  bg: "#050a14",
-  surface: "#111b2d",
-  accent: "#c4a459",
-  accentLight: "#e5d19a",
-  text: "#ffffff",
-  muted: "#8b949e",
-  border: "#1e293b",
-  red: "#ff4d4d",
-  sub: "#a3aab2"
+  bg: "#f5f1ea",
+  surface: "#ffffff",
+  surfaceAlt: "#faf6ee",
+  accent: "#0f6b5f",
+  accentLight: "#14897a",
+  accentDark: "#0a4d44",
+  gold: "#b08840",
+  text: "#1a2530",
+  muted: "#6b7785",
+  border: "#e3ddd1",
+  borderStrong: "#cfc6b4",
+  red: "#c84545",
+  sub: "#8a93a0",
+  shadow: "0 4px 20px rgba(15,107,95,0.08)",
+  shadowLg: "0 8px 32px rgba(15,107,95,0.12)"
 };
 
 const ADHAN_VOICES = [
@@ -480,8 +486,100 @@ const PrayerTimes = ({ pos }) => {
   );
 };
 
+const RECITERS = [
+  { id: 'afs',   name: 'مشاري بن راشد العفاسي',     server: 'https://server8.mp3quran.net/afs/' },
+  { id: 'shur',  name: 'سعود الشريم',                server: 'https://server7.mp3quran.net/shur/' },
+  { id: 'sds',   name: 'عبدالرحمن السديس',           server: 'https://server11.mp3quran.net/sds/' },
+  { id: 'husr',  name: 'محمود خليل الحصري',          server: 'https://server13.mp3quran.net/husr/' },
+  { id: 'minsh', name: 'محمد صديق المنشاوي',         server: 'https://server10.mp3quran.net/minsh/' },
+  { id: 'basit', name: 'عبدالباسط عبدالصمد',         server: 'https://server7.mp3quran.net/basit/' },
+  { id: 'qtm',   name: 'ناصر القطامي',               server: 'https://server6.mp3quran.net/qtm/' },
+  { id: 'ajm',   name: 'أحمد بن علي العجمي',         server: 'https://server10.mp3quran.net/ajm/' }
+];
+const reciterUrl = (rid, surahNum) => {
+  const r = RECITERS.find(x => x.id === rid) || RECITERS[0];
+  return `${r.server}${String(surahNum).padStart(3, '0')}.mp3`;
+};
+
+const SurahIndex = ({ data, surahPages, openSurah, currentSurahNum }) => {
+  const [q, setQ] = useState('');
+  if (!data || !surahPages) {
+    return <div style={{ color: C.muted, textAlign: 'center', padding: 30 }}>جاري التحميل...</div>;
+  }
+  const norm = (s) => (s || '').replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0610-\u061A]/g, '')
+    .replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
+  const qn = norm(q.trim());
+  const filtered = data.surahs.filter(s => {
+    if (!qn) return true;
+    return norm(s.name).includes(qn) || (s.en || '').toLowerCase().includes(q.trim().toLowerCase()) || String(s.n) === q.trim();
+  });
+  return (
+    <div>
+      <div style={{ position: 'relative', marginBottom: 12 }}>
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="ابحث باسم السورة أو رقمها..."
+          style={{
+            width: '100%', padding: '12px 14px', boxSizing: 'border-box',
+            background: C.surface, color: C.text, border: `1px solid ${C.border}`,
+            borderRadius: 12, fontSize: 14, fontFamily: 'inherit',
+            boxShadow: C.shadow
+          }}
+        />
+      </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8
+      }}>
+        {filtered.map(s => {
+          const pg = surahPages[s.n];
+          const isCurrent = currentSurahNum === s.n;
+          return (
+            <button
+              key={s.n}
+              onClick={() => openSurah(s.n)}
+              style={{
+                background: isCurrent ? C.accent : C.surface,
+                color: isCurrent ? '#fff' : C.text,
+                border: `1px solid ${isCurrent ? C.accent : C.border}`,
+                padding: '12px 10px', borderRadius: 12, cursor: 'pointer',
+                textAlign: 'right', display: 'flex', alignItems: 'center', gap: 10,
+                boxShadow: isCurrent ? '0 4px 14px rgba(15,107,95,0.25)' : C.shadow,
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                fontFamily: 'inherit'
+              }}
+            >
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: isCurrent ? 'rgba(255,255,255,0.2)' : C.surfaceAlt,
+                color: isCurrent ? '#fff' : C.accent,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 'bold', fontSize: 13, flexShrink: 0,
+                border: `1px solid ${isCurrent ? 'rgba(255,255,255,0.3)' : C.border}`
+              }}>{s.n}</div>
+              <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <div style={{
+                  fontSize: 15, fontWeight: 'bold',
+                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                }}>{s.name.replace('سُورَةُ ', '')}</div>
+                <div style={{
+                  fontSize: 11, marginTop: 2,
+                  color: isCurrent ? 'rgba(255,255,255,0.85)' : C.muted
+                }}>صفحة {pg} • {s.count} آية</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {filtered.length === 0 && (
+        <div style={{ textAlign: 'center', color: C.muted, padding: 30 }}>لا توجد نتائج</div>
+      )}
+    </div>
+  );
+};
+
 const QuranSection = () => {
-  const [view, setView] = useState('mushaf');
+  const [view, setView] = useState('index');
   const [page, setPage] = useState(() => {
     const p = parseInt(localStorage.getItem('islam_quran_page') || '1', 10);
     return Number.isNaN(p) ? 1 : Math.max(1, Math.min(604, p));
@@ -490,20 +588,16 @@ const QuranSection = () => {
   const [ayahPicker, setAyahPicker] = useState(null);
   const [pagesMap, setPagesMap] = useState(null);
   const [data, setData] = useState(null);
-  const [reciter, setReciter] = useState(() => localStorage.getItem('islam_reciter') || 'ar.alafasy');
-  const [audioState, setAudioState] = useState('idle'); // 'idle' | 'loading' | 'playing'
+  const [reciter, setReciter] = useState(() => {
+    const saved = localStorage.getItem('islam_reciter');
+    if (saved && RECITERS.find(r => r.id === saved)) return saved;
+    return 'afs';
+  });
+  const [audioState, setAudioState] = useState('idle');
   const audioRef = useRef(null);
+  const [surahPages, setSurahPages] = useState(null);
+  const [dragX, setDragX] = useState(0);
   const pageStr = String(page).padStart(3, '0');
-
-  const RECITERS = [
-    { id: 'ar.alafasy', name: 'مشاري العفاسي' },
-    { id: 'ar.husary', name: 'محمود خليل الحصري' },
-    { id: 'ar.minshawi', name: 'محمد صديق المنشاوي' },
-    { id: 'ar.abdurrahmaansudais', name: 'عبدالرحمن السديس' },
-    { id: 'ar.abdulbasitmurattal', name: 'عبدالباسط عبدالصمد' },
-    { id: 'ar.muhammadayyoub', name: 'محمد أيوب' },
-    { id: 'ar.hudhaify', name: 'علي الحذيفي' }
-  ];
 
   useEffect(() => { try { localStorage.setItem('islam_reciter', reciter); } catch {} }, [reciter]);
 
@@ -518,7 +612,7 @@ const QuranSection = () => {
   const playSurah = () => {
     if (!currentSurahNum) return;
     if (audioState === 'playing') { stopAudio(); return; }
-    const url = `https://cdn.islamic.network/quran/audio-surah/128/${reciter}/${currentSurahNum}.mp3`;
+    const url = reciterUrl(reciter, currentSurahNum);
     if (!audioRef.current) audioRef.current = new Audio();
     audioRef.current.src = url;
     setAudioState('loading');
@@ -538,32 +632,52 @@ const QuranSection = () => {
       fetch('/quran/pages.json').then(r => r.json()),
       fetch('/tafsir/surahs.json').then(r => r.json()),
       fetch('/tafsir/muyassar.json').then(r => r.json()),
-      fetch('/tafsir/quran.json').then(r => r.json())
-    ]).then(([pages, surahs, tafsir, quran]) => {
+      fetch('/tafsir/quran.json').then(r => r.json()),
+      fetch('/quran/surah-pages.json').then(r => r.json()).catch(() => null)
+    ]).then(([pages, surahs, tafsir, quran, sp]) => {
       setPagesMap(pages);
       setData({ surahs, tafsir, quran });
+      if (sp) setSurahPages(sp);
     }).catch(() => {});
   }, []);
+
+  const openSurah = (surahNum) => {
+    if (surahPages && surahPages[surahNum]) {
+      setFlipDir(0);
+      setPage(surahPages[surahNum]);
+      setView('mushaf');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const goNext = () => { if (page < 604) { setFlipDir(-1); setPage(p => Math.min(604, p + 1)); } };
   const goPrev = () => { if (page > 1) { setFlipDir(1); setPage(p => Math.max(1, p - 1)); } };
 
-  // Touch swipe handlers — Arabic mushaf: swipe LEFT (finger goes left) = next page
-  const touchRef = useRef({ x: 0, y: 0, t: 0, longTimer: null, moved: false });
+  // Touch swipe — Arabic mushaf: dx>0 = next page. Smoother: track drag, lower threshold, follow finger.
+  const touchRef = useRef({ x: 0, y: 0, t: 0, longTimer: null, moved: false, axis: null });
   const onTouchStart = (e) => {
     const t = e.touches[0];
-    touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now(), moved: false, longTimer: null };
+    touchRef.current = { x: t.clientX, y: t.clientY, t: Date.now(), moved: false, axis: null, longTimer: null };
     touchRef.current.longTimer = setTimeout(() => {
       if (!touchRef.current.moved && pagesMap && pagesMap[page]) {
         setAyahPicker({ page });
       }
-    }, 550);
+    }, 500);
   };
   const onTouchMove = (e) => {
     const t = e.touches[0];
-    if (Math.abs(t.clientX - touchRef.current.x) > 10 || Math.abs(t.clientY - touchRef.current.y) > 10) {
-      touchRef.current.moved = true;
-      clearTimeout(touchRef.current.longTimer);
+    const dx = t.clientX - touchRef.current.x;
+    const dy = t.clientY - touchRef.current.y;
+    if (!touchRef.current.axis) {
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+        touchRef.current.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+        touchRef.current.moved = true;
+        clearTimeout(touchRef.current.longTimer);
+      }
+    }
+    if (touchRef.current.axis === 'x') {
+      const limited = Math.max(-180, Math.min(180, dx));
+      setDragX(limited);
     }
   };
   const onTouchEnd = (e) => {
@@ -572,61 +686,75 @@ const QuranSection = () => {
     const dx = t.clientX - touchRef.current.x;
     const dy = t.clientY - touchRef.current.y;
     const dt = Date.now() - touchRef.current.t;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 600) {
+    setDragX(0);
+    if (touchRef.current.axis !== 'x') return;
+    const velocity = Math.abs(dx) / Math.max(dt, 1);
+    const passDistance = Math.abs(dx) > 35;
+    const passVelocity = velocity > 0.35 && Math.abs(dx) > 18;
+    if ((passDistance || passVelocity) && Math.abs(dx) > Math.abs(dy)) {
       if (dx > 0) goNext(); else goPrev();
     }
   };
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, background: C.surface, padding: 4, borderRadius: 12, border: `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, background: C.surfaceAlt, padding: 5, borderRadius: 14, border: `1px solid ${C.border}` }}>
         {[
-          { id: 'mushaf', label: '📖 المصحف' },
-          { id: 'tafsir', label: '📚 التفسير الميسّر' }
+          { id: 'index',  label: 'فهرس السور' },
+          { id: 'mushaf', label: 'المصحف' },
+          { id: 'tafsir', label: 'التفسير الميسّر' }
         ].map(v => (
           <button key={v.id} onClick={() => setView(v.id)} style={{
-            flex: 1, padding: '10px 8px', borderRadius: 9, border: 'none', cursor: 'pointer',
+            flex: 1, padding: '10px 6px', borderRadius: 10, border: 'none', cursor: 'pointer',
             background: view === v.id ? C.accent : 'transparent',
-            color: view === v.id ? C.bg : C.muted,
-            fontWeight: 'bold', fontSize: 14
+            color: view === v.id ? '#fff' : C.muted,
+            fontWeight: 'bold', fontSize: 13,
+            transition: 'all 0.18s ease',
+            boxShadow: view === v.id ? '0 2px 8px rgba(15,107,95,0.25)' : 'none'
           }}>{v.label}</button>
         ))}
       </div>
+
+      {view === 'index' && (
+        <SurahIndex data={data} surahPages={surahPages} openSurah={openSurah} currentSurahNum={currentSurahNum} />
+      )}
 
       {view === 'mushaf' && (
         <div style={{ textAlign: 'center' }}>
           <div style={{
             background: C.surface, border: `1px solid ${C.border}`,
-            borderRadius: 12, padding: 10, marginBottom: 10,
-            display: 'flex', alignItems: 'center', gap: 8
+            borderRadius: 14, padding: 10, marginBottom: 10,
+            display: 'flex', alignItems: 'center', gap: 8,
+            boxShadow: C.shadow
           }}>
             <button onClick={playSurah} disabled={!currentSurahNum || audioState === 'loading'} style={{
               background: audioState === 'playing' ? C.red : C.accent,
-              color: audioState === 'playing' ? '#fff' : C.bg,
+              color: '#fff',
               border: 'none', padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
-              fontWeight: 'bold', fontSize: 14, minWidth: 90
+              fontWeight: 'bold', fontSize: 14, minWidth: 96,
+              boxShadow: '0 2px 8px rgba(15,107,95,0.25)'
             }}>
-              {audioState === 'loading' ? '... جاري' : audioState === 'playing' ? '⏹ إيقاف' : '▶ تلاوة'}
+              {audioState === 'loading' ? '... جاري' : audioState === 'playing' ? 'إيقاف' : 'تلاوة'}
             </button>
             <select value={reciter} onChange={e => setReciter(e.target.value)} style={{
-              flex: 1, background: C.bg, color: C.text, border: `1px solid ${C.border}`,
+              flex: 1, background: C.surfaceAlt, color: C.text, border: `1px solid ${C.border}`,
               padding: '10px', borderRadius: 10, fontSize: 13, fontFamily: 'inherit'
             }}>
               {RECITERS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
           {currentSurah && (
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>
-              السورة الحالية: <span style={{ color: C.accentLight, fontWeight: 'bold' }}>{currentSurah.name}</span>
+            <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>
+              السورة الحالية: <span style={{ color: C.accent, fontWeight: 'bold' }}>{currentSurah.name}</span>
             </div>
           )}
           <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <button onClick={goPrev} disabled={page <= 1} style={{ ...btnStyle, opacity: page <= 1 ? 0.4 : 1 }}>→ السابق</button>
-            <div style={{ color: C.accentLight, fontSize: 14, fontWeight: 'bold' }}>صفحة {page} / 604</div>
-            <button onClick={goNext} disabled={page >= 604} style={{ ...btnStyle, opacity: page >= 604 ? 0.4 : 1 }}>التالي ←</button>
+            <button onClick={goPrev} disabled={page <= 1} style={{ ...btnStyle, opacity: page <= 1 ? 0.4 : 1 }}>السابق →</button>
+            <div style={{ color: C.accent, fontSize: 14, fontWeight: 'bold' }}>صفحة {page} / 604</div>
+            <button onClick={goNext} disabled={page >= 604} style={{ ...btnStyle, opacity: page >= 604 ? 0.4 : 1 }}>← التالي</button>
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
-            اسحب يميناً للصفحة التالية أو يساراً للسابقة • اضغط مطوّلاً على الصفحة لعرض تفسير الآيات
+            اسحب يميناً للصفحة التالية أو يساراً للسابقة • اضغط مطوّلاً لعرض تفسير الآيات
           </div>
 
           <div
@@ -636,11 +764,12 @@ const QuranSection = () => {
             onContextMenu={(e) => { e.preventDefault(); if (pagesMap && pagesMap[page]) setAyahPicker({ page }); }}
             style={{
               marginLeft: -15, marginRight: -15,
-              overflow: 'hidden', borderRadius: 8,
+              overflow: 'hidden', borderRadius: 10,
               background: '#fff',
-              boxShadow: '0 6px 30px rgba(0,0,0,0.6)',
+              boxShadow: '0 8px 28px rgba(15,107,95,0.18)',
               touchAction: 'pan-y',
-              userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none'
+              userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
+              border: `1px solid ${C.border}`
             }}
           >
             <img
@@ -651,15 +780,17 @@ const QuranSection = () => {
               style={{
                 display: 'block', width: '100%', height: 'auto',
                 maxHeight: '85vh', objectFit: 'contain',
-                animation: `pageFlip${flipDir < 0 ? 'L' : 'R'} 0.28s ease-out`,
+                transform: `translateX(${dragX}px)`,
+                transition: dragX === 0 ? 'transform 0.22s cubic-bezier(.2,.8,.2,1)' : 'none',
+                animation: dragX === 0 ? `pageFlip${flipDir < 0 ? 'L' : 'R'} 0.22s cubic-bezier(.2,.8,.2,1)` : 'none',
                 pointerEvents: 'none'
               }}
             />
           </div>
 
           <style>{`
-            @keyframes pageFlipL { from { transform: translateX(15%); opacity: 0.3; } to { transform: translateX(0); opacity: 1; } }
-            @keyframes pageFlipR { from { transform: translateX(-15%); opacity: 0.3; } to { transform: translateX(0); opacity: 1; } }
+            @keyframes pageFlipL { from { transform: translateX(28%); opacity: 0.4; } to { transform: translateX(0); opacity: 1; } }
+            @keyframes pageFlipR { from { transform: translateX(-28%); opacity: 0.4; } to { transform: translateX(0); opacity: 1; } }
           `}</style>
 
           <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
@@ -672,7 +803,7 @@ const QuranSection = () => {
               }}
               style={{
                 width: 80, padding: '6px 8px', textAlign: 'center',
-                background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6
+                background: C.surface, color: C.text, border: `1px solid ${C.border}`, borderRadius: 8
               }}
             />
           </div>
@@ -1496,14 +1627,307 @@ const DhikrCard = ({ item }) => {
           <button
             onClick={() => setCount(c => Math.min(target, c + 1))}
             style={{
-              background: done ? C.accent : C.bg,
-              color: done ? C.bg : C.accent,
+              background: done ? C.accent : C.surface,
+              color: done ? '#fff' : C.accent,
               border: `1px solid ${C.accent}`,
-              padding: '6px 18px', bor8derRadius: 8, cursor: 'pointer', fontWeight: 'bold'
+              padding: '6px 18px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold'
             }}
           >+1</button>
         </div>
       </div>
+    </div>
+  );
+};
+
+const AdhkarHub = () => {
+  const [sub, setSub] = useState(() => {
+    try {
+      const h = (window.location.hash || '').split('/');
+      if (h[1] === 'sunnah') return 'sunnah';
+      if (h[1] === 'adhkar') return 'adhkar';
+    } catch {}
+    return localStorage.getItem('islam_adhkar_sub') || 'adhkar';
+  });
+  useEffect(() => { try { localStorage.setItem('islam_adhkar_sub', sub); } catch {} }, [sub]);
+  return (
+    <div>
+      <div style={{
+        display: 'flex', gap: 6, marginBottom: 14, background: C.surfaceAlt,
+        padding: 5, borderRadius: 14, border: `1px solid ${C.border}`
+      }}>
+        {[
+          { id: 'adhkar', label: 'الأذكار والأدعية' },
+          { id: 'sunnah', label: 'السنة النبوية' }
+        ].map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)} style={{
+            flex: 1, padding: '10px 6px', borderRadius: 10, border: 'none', cursor: 'pointer',
+            background: sub === t.id ? C.accent : 'transparent',
+            color: sub === t.id ? '#fff' : C.muted,
+            fontWeight: 'bold', fontSize: 13,
+            boxShadow: sub === t.id ? '0 2px 8px rgba(15,107,95,0.25)' : 'none',
+            transition: 'all 0.18s ease'
+          }}>{t.label}</button>
+        ))}
+      </div>
+      {sub === 'adhkar' ? <AdhkarSection /> : <SunnahSection />}
+    </div>
+  );
+};
+
+const SunnahSection = () => {
+  const [book, setBook] = useState(null);
+  const [section, setSection] = useState(() => parseInt(localStorage.getItem('islam_bukhari_section') || '0', 10) || null);
+  const [query, setQuery] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const res = await fetch('/sunnah/bukhari.json');
+        if (!res.ok) throw new Error('failed');
+        const total = parseInt(res.headers.get('content-length') || '0', 10);
+        if (total && res.body) {
+          const reader = res.body.getReader();
+          const chunks = [];
+          let received = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            if (!cancel) setProgress(Math.round((received / total) * 100));
+          }
+          const blob = new Blob(chunks);
+          const txt = await blob.text();
+          if (!cancel) setBook(JSON.parse(txt));
+        } else {
+          const j = await res.json();
+          if (!cancel) setBook(j);
+        }
+      } catch (e) {
+        if (!cancel) setError('تعذّر تحميل صحيح البخاري');
+      }
+    })();
+    return () => { cancel = true; };
+  }, []);
+
+  useEffect(() => {
+    if (section != null) { try { localStorage.setItem('islam_bukhari_section', String(section)); } catch {} }
+  }, [section]);
+
+  const stripA = (s) => (s || '')
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0610-\u061A]/g, '')
+    .replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
+
+  const sectionNames = useMemo(() => {
+    if (!book) return null;
+    const arabicNames = {
+      1:'بدء الوحي',2:'الإيمان',3:'العلم',4:'الوضوء',5:'الغسل',6:'الحيض',7:'التيمم',8:'الصلاة',
+      9:'مواقيت الصلاة',10:'الأذان',11:'الجمعة',12:'صلاة الخوف',13:'العيدين',14:'الوتر',15:'الاستسقاء',
+      16:'الكسوف',17:'سجود القرآن',18:'تقصير الصلاة',19:'التهجد',20:'فضل الصلاة في مسجد مكة والمدينة',
+      21:'العمل في الصلاة',22:'السهو',23:'الجنائز',24:'الزكاة',25:'الحج',26:'العمرة',27:'المحصر',
+      28:'جزاء الصيد',29:'فضائل المدينة',30:'الصوم',31:'صلاة التراويح',32:'فضل ليلة القدر',33:'الاعتكاف',
+      34:'البيوع',35:'السلم',36:'الشفعة',37:'الإجارة',38:'الحوالات',39:'الكفالة',40:'الوكالة',
+      41:'المزارعة',42:'المساقاة',43:'الاستقراض',44:'الخصومات',45:'اللقطة',46:'المظالم',47:'الشركة',
+      48:'الرهن',49:'العتق',50:'المكاتب',51:'الهبة وفضلها',52:'الشهادات',53:'الصلح',54:'الشروط',
+      55:'الوصايا',56:'الجهاد والسير',57:'فرض الخمس',58:'الجزية والموادعة',59:'بدء الخلق',60:'أحاديث الأنبياء',
+      61:'المناقب',62:'فضائل الصحابة',63:'مناقب الأنصار',64:'المغازي',65:'تفسير القرآن',66:'فضائل القرآن',
+      67:'النكاح',68:'الطلاق',69:'النفقات',70:'الأطعمة',71:'العقيقة',72:'الذبائح والصيد',73:'الأضاحي',
+      74:'الأشربة',75:'المرضى',76:'الطب',77:'اللباس',78:'الأدب',79:'الاستئذان',80:'الدعوات',
+      81:'الرقاق',82:'القدر',83:'الأيمان والنذور',84:'كفارات الأيمان',85:'الفرائض',86:'الحدود',
+      87:'الديات',88:'استتابة المرتدين',89:'الإكراه',90:'الحيل',91:'التعبير',92:'الفتن',93:'الأحكام',
+      94:'التمني',95:'أخبار الآحاد',96:'الاعتصام بالكتاب والسنة',97:'التوحيد'
+    };
+    const out = [];
+    const sections = book.metadata?.sections || {};
+    for (const k of Object.keys(sections)) {
+      const id = parseInt(k, 10);
+      if (!id) continue;
+      out.push({ id, name: arabicNames[id] || sections[k] || `كتاب ${id}` });
+    }
+    return out.sort((a, b) => a.id - b.id);
+  }, [book]);
+
+  const sectionHadiths = useMemo(() => {
+    if (!book || section == null) return [];
+    return book.hadiths.filter(h => h.reference?.book === section);
+  }, [book, section]);
+
+  const searchResults = useMemo(() => {
+    if (!book || !query.trim() || query.trim().length < 2) return null;
+    const q = stripA(query);
+    const out = [];
+    for (const h of book.hadiths) {
+      if (stripA(h.text).includes(q)) {
+        out.push(h);
+        if (out.length >= 50) break;
+      }
+    }
+    return out;
+  }, [book, query]);
+
+  if (error) {
+    return <div style={{ color: C.red, textAlign: 'center', padding: 30 }}>{error}</div>;
+  }
+  if (!book) {
+    return (
+      <div style={{ textAlign: 'center', padding: 40, color: C.muted }}>
+        <div style={{ marginBottom: 12, fontSize: 15 }}>جاري تحميل صحيح البخاري...</div>
+        <div style={{
+          width: '100%', maxWidth: 280, height: 8, margin: '0 auto',
+          background: C.surfaceAlt, borderRadius: 4, overflow: 'hidden',
+          border: `1px solid ${C.border}`
+        }}>
+          <div style={{
+            width: `${progress}%`, height: '100%', background: C.accent,
+            transition: 'width 0.2s ease'
+          }} />
+        </div>
+        <div style={{ marginTop: 8, fontSize: 12 }}>{progress}%</div>
+        <div style={{ marginTop: 14, fontSize: 11, color: C.sub }}>
+          سيتم تحميل الكتاب لمرة واحدة فقط ثم يحفظ في المتصفح
+        </div>
+      </div>
+    );
+  }
+
+  if (!sectionNames) return null;
+
+  return (
+    <div>
+      <div style={{
+        background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: 12, padding: 12, marginBottom: 12,
+        textAlign: 'center', boxShadow: C.shadow
+      }}>
+        <div style={{ color: C.accent, fontWeight: 'bold', fontSize: 16 }}>صحيح البخاري</div>
+        <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>
+          الإمام محمد بن إسماعيل البخاري • {book.hadiths.length} حديث في {sectionNames.length} كتاب
+        </div>
+      </div>
+
+      <div style={{ position: 'relative', marginBottom: 12 }}>
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="ابحث في أحاديث صحيح البخاري..."
+          style={{
+            width: '100%', padding: '12px 36px 12px 12px', boxSizing: 'border-box',
+            background: C.surface, color: C.text,
+            border: `1px solid ${C.border}`, borderRadius: 12,
+            fontSize: 14, fontFamily: 'inherit', boxShadow: C.shadow
+          }}
+        />
+        {query && (
+          <button onClick={() => setQuery('')} style={{
+            position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+            background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 18
+          }}>✕</button>
+        )}
+      </div>
+
+      {searchResults ? (
+        <div>
+          <div style={{ color: C.muted, fontSize: 12, marginBottom: 10, textAlign: 'center' }}>
+            {searchResults.length === 0 ? 'لا توجد نتائج' : `${searchResults.length}${searchResults.length >= 50 ? '+' : ''} نتيجة`}
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {searchResults.map((h, i) => (
+              <HadithCard key={i} h={h} sectionNames={sectionNames} onOpenBook={(b) => { setQuery(''); setSection(b); }} />
+            ))}
+          </div>
+        </div>
+      ) : section ? (
+        <div>
+          <button onClick={() => setSection(null)} style={{
+            background: C.surface, color: C.accent, border: `1px solid ${C.border}`,
+            padding: '8px 14px', borderRadius: 10, cursor: 'pointer', marginBottom: 12,
+            fontWeight: 'bold', fontSize: 13, fontFamily: 'inherit', boxShadow: C.shadow
+          }}>→ عودة لقائمة الكتب</button>
+          <div style={{
+            color: C.text, fontWeight: 'bold', fontSize: 16, marginBottom: 10,
+            paddingBottom: 8, borderBottom: `2px solid ${C.accent}`
+          }}>
+            كتاب {sectionNames.find(s => s.id === section)?.name || section}
+            <span style={{ color: C.muted, fontSize: 12, fontWeight: 'normal', marginRight: 8 }}>
+              ({sectionHadiths.length} حديث)
+            </span>
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            {sectionHadiths.map((h, i) => (
+              <HadithCard key={i} h={h} sectionNames={sectionNames} hideBookLink />
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          {sectionNames.map(s => {
+            const count = book.hadiths.filter(h => h.reference?.book === s.id).length;
+            return (
+              <button key={s.id} onClick={() => setSection(s.id)} style={{
+                background: C.surface, border: `1px solid ${C.border}`,
+                padding: '12px 10px', borderRadius: 12, cursor: 'pointer',
+                textAlign: 'right', display: 'flex', alignItems: 'center', gap: 10,
+                color: C.text, fontFamily: 'inherit', boxShadow: C.shadow
+              }}>
+                <div style={{
+                  width: 34, height: 34, borderRadius: 10,
+                  background: C.surfaceAlt, color: C.accent,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 'bold', fontSize: 12, flexShrink: 0,
+                  border: `1px solid ${C.border}`
+                }}>{s.id}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 14, fontWeight: 'bold',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                  }}>{s.name}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                    {count} حديث
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const HadithCard = ({ h, sectionNames, hideBookLink, onOpenBook }) => {
+  const bookId = h.reference?.book;
+  const bookName = bookId && sectionNames ? sectionNames.find(s => s.id === bookId)?.name : null;
+  return (
+    <div style={{
+      background: C.surface, padding: 14, borderRadius: 12,
+      border: `1px solid ${C.border}`, boxShadow: C.shadow
+    }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: 10, gap: 8
+      }}>
+        <div style={{
+          background: C.surfaceAlt, color: C.accent,
+          padding: '4px 10px', borderRadius: 8,
+          fontSize: 11, fontWeight: 'bold', border: `1px solid ${C.border}`
+        }}>حديث رقم {h.hadithnumber}</div>
+        {bookName && !hideBookLink && (
+          <button
+            onClick={() => onOpenBook && onOpenBook(bookId)}
+            style={{
+              background: 'transparent', color: C.muted, border: 'none',
+              cursor: 'pointer', fontSize: 11, fontFamily: 'inherit'
+            }}
+          >كتاب {bookName} ←</button>
+        )}
+      </div>
+      <div style={{
+        fontSize: 16, lineHeight: 2.0, color: C.text,
+        fontFamily: '"Amiri", "Scheherazade", serif'
+      }}>{h.text}</div>
     </div>
   );
 };
@@ -1706,7 +2130,16 @@ function LocationBar({ pos, setPos, city, setCity, status, refresh }) {
 }
 
 export default function IslamicApp() {
-  const [tab, setTab] = useState("prayer");
+  const [tab, setTab] = useState(() => {
+    try {
+      const h = (window.location.hash || '').replace('#', '');
+      if (['prayer','quran','adhkar','sadaqah'].includes(h)) return h;
+      const s = localStorage.getItem('islam_tab');
+      if (['prayer','quran','adhkar','sadaqah'].includes(s)) return s;
+    } catch {}
+    return "prayer";
+  });
+  useEffect(() => { try { localStorage.setItem('islam_tab', tab); window.location.hash = tab; } catch {} }, [tab]);
   const [pos, setPos] = useState(null);
   const [city, setCity] = useState('');
   const [status, setStatus] = useState('جاري تحديد الموقع...');
@@ -1781,7 +2214,7 @@ export default function IslamicApp() {
         )}
         {tab === "prayer" && <PrayerTimes pos={pos} />}
         {tab === "quran" && <QuranSection />}
-        {tab === "adhkar" && <AdhkarSection />}
+        {tab === "adhkar" && <AdhkarHub />}
         {tab === "sadaqah" && <SadaqahSection />}
       </main>
 
