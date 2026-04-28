@@ -2,21 +2,97 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as adhan from 'adhan';
 
 const C = {
-  bg: "#f5f1ea",
-  surface: "#ffffff",
-  surfaceAlt: "#faf6ee",
-  accent: "#0f6b5f",
-  accentLight: "#14897a",
-  accentDark: "#0a4d44",
-  gold: "#b08840",
-  text: "#1a2530",
-  muted: "#6b7785",
-  border: "#e3ddd1",
-  borderStrong: "#cfc6b4",
-  red: "#c84545",
-  sub: "#8a93a0",
-  shadow: "0 4px 20px rgba(15,107,95,0.08)",
-  shadowLg: "0 8px 32px rgba(15,107,95,0.12)"
+  bg:           "var(--c-bg)",
+  surface:      "var(--c-surface)",
+  surfaceAlt:   "var(--c-surface-alt)",
+  accent:       "var(--c-accent)",
+  accentLight:  "var(--c-accent-light)",
+  accentDark:   "var(--c-accent-dark)",
+  gold:         "var(--c-gold)",
+  text:         "var(--c-text)",
+  muted:        "var(--c-muted)",
+  border:       "var(--c-border)",
+  borderStrong: "var(--c-border-strong)",
+  red:          "var(--c-red)",
+  sub:          "var(--c-sub)",
+  shadow:       "var(--c-shadow)",
+  shadowLg:     "var(--c-shadow-lg)"
+};
+
+const THEMES = {
+  light: {
+    '--c-bg':           '#f5f1ea',
+    '--c-surface':      '#ffffff',
+    '--c-surface-alt':  '#faf6ee',
+    '--c-accent':       '#0f6b5f',
+    '--c-accent-light': '#14897a',
+    '--c-accent-dark':  '#0a4d44',
+    '--c-gold':         '#b08840',
+    '--c-text':         '#1a2530',
+    '--c-muted':        '#6b7785',
+    '--c-border':       '#e3ddd1',
+    '--c-border-strong':'#cfc6b4',
+    '--c-red':          '#c84545',
+    '--c-sub':          '#8a93a0',
+    '--c-shadow':       '0 4px 20px rgba(15,107,95,0.08)',
+    '--c-shadow-lg':    '0 8px 32px rgba(15,107,95,0.12)'
+  },
+  dark: {
+    '--c-bg':           '#0c1419',
+    '--c-surface':      '#152027',
+    '--c-surface-alt':  '#1c2a33',
+    '--c-accent':       '#3aae9d',
+    '--c-accent-light': '#5dc7b5',
+    '--c-accent-dark':  '#2a8b7d',
+    '--c-gold':         '#d4ac5a',
+    '--c-text':         '#e9eef2',
+    '--c-muted':        '#8da3ad',
+    '--c-border':       '#26343d',
+    '--c-border-strong':'#374751',
+    '--c-red':          '#e57373',
+    '--c-sub':          '#7f8d96',
+    '--c-shadow':       '0 4px 20px rgba(0,0,0,0.35)',
+    '--c-shadow-lg':    '0 8px 32px rgba(0,0,0,0.45)'
+  }
+};
+
+const FONT_FAMILIES = [
+  { id: 'system',       label: 'النظام (افتراضي)', stack: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+  { id: 'amiri',        label: 'أميري — كلاسيكي',   stack: '"Amiri", "Scheherazade New", serif' },
+  { id: 'cairo',        label: 'القاهرة — حديث',    stack: '"Cairo", system-ui, sans-serif' },
+  { id: 'tajawal',      label: 'تجوّال — أنيق',     stack: '"Tajawal", system-ui, sans-serif' },
+  { id: 'noto',         label: 'نوتو نسخ عربي',     stack: '"Noto Naskh Arabic", "Amiri", serif' },
+  { id: 'scheherazade', label: 'شهرزاد — قرآني',    stack: '"Scheherazade New", "Amiri", serif' },
+  { id: 'reem',         label: 'ريم كوفي',           stack: '"Reem Kufi", system-ui, sans-serif' }
+];
+
+const FONT_SIZES = [
+  { id: 'sm',  label: 'صغير',   px: 14 },
+  { id: 'md',  label: 'متوسط',  px: 16 },
+  { id: 'lg',  label: 'كبير',   px: 18 },
+  { id: 'xl',  label: 'كبير جداً', px: 20 }
+];
+
+const useAppSettings = () => {
+  const [settings, setSettings] = React.useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('islam_app_settings') || 'null');
+      if (s) return { theme: 'light', fontId: 'system', sizeId: 'md', ...s };
+    } catch {}
+    return { theme: 'light', fontId: 'system', sizeId: 'md' };
+  });
+  React.useEffect(() => {
+    try { localStorage.setItem('islam_app_settings', JSON.stringify(settings)); } catch {}
+    const root = document.documentElement;
+    const theme = THEMES[settings.theme] || THEMES.light;
+    for (const k of Object.keys(theme)) root.style.setProperty(k, theme[k]);
+    const f = FONT_FAMILIES.find(x => x.id === settings.fontId) || FONT_FAMILIES[0];
+    root.style.setProperty('--app-font', f.stack);
+    const sz = FONT_SIZES.find(x => x.id === settings.sizeId) || FONT_SIZES[1];
+    root.style.setProperty('--app-font-size', sz.px + 'px');
+    root.setAttribute('data-theme', settings.theme);
+  }, [settings]);
+  return [settings, setSettings];
 };
 
 const ADHAN_VOICES = [
@@ -487,18 +563,30 @@ const PrayerTimes = ({ pos }) => {
 };
 
 const RECITERS = [
-  { id: 'afs',   name: 'مشاري بن راشد العفاسي',     server: 'https://server8.mp3quran.net/afs/' },
-  { id: 'shur',  name: 'سعود الشريم',                server: 'https://server7.mp3quran.net/shur/' },
-  { id: 'sds',   name: 'عبدالرحمن السديس',           server: 'https://server11.mp3quran.net/sds/' },
-  { id: 'husr',  name: 'محمود خليل الحصري',          server: 'https://server13.mp3quran.net/husr/' },
-  { id: 'minsh', name: 'محمد صديق المنشاوي',         server: 'https://server10.mp3quran.net/minsh/' },
-  { id: 'basit', name: 'عبدالباسط عبدالصمد',         server: 'https://server7.mp3quran.net/basit/' },
-  { id: 'qtm',   name: 'ناصر القطامي',               server: 'https://server6.mp3quran.net/qtm/' },
-  { id: 'ajm',   name: 'أحمد بن علي العجمي',         server: 'https://server10.mp3quran.net/ajm/' }
+  { id: 'afs',     name: 'مشاري بن راشد العفاسي',     server: 'https://server8.mp3quran.net/afs/',     ayah: 'ar.alafasy' },
+  { id: 'shur',    name: 'سعود الشريم',                server: 'https://server7.mp3quran.net/shur/',    ayah: 'ar.saoodshuraym' },
+  { id: 'sds',     name: 'عبدالرحمن السديس',           server: 'https://server11.mp3quran.net/sds/',    ayah: 'ar.abdurrahmaansudais' },
+  { id: 'husr',    name: 'محمود خليل الحصري',          server: 'https://server13.mp3quran.net/husr/',   ayah: 'ar.husary' },
+  { id: 'minsh',   name: 'محمد صديق المنشاوي',         server: 'https://server10.mp3quran.net/minsh/',  ayah: 'ar.minshawi' },
+  { id: 'basit',   name: 'عبدالباسط عبدالصمد',         server: 'https://server7.mp3quran.net/basit/',   ayah: 'ar.abdulbasitmurattal' },
+  { id: 'qtm',     name: 'ناصر القطامي',               server: 'https://server6.mp3quran.net/qtm/',     ayah: 'ar.nasseralqatami' },
+  { id: 'ajm',     name: 'أحمد بن علي العجمي',         server: 'https://server10.mp3quran.net/ajm/',    ayah: 'ar.ahmedajamy' },
+  { id: 'maher',   name: 'ماهر المعيقلي',              server: 'https://server12.mp3quran.net/maher/',  ayah: 'ar.mahermuaiqly' },
+  { id: 'jhn',     name: 'عبدالله عوّاد الجهني',       server: 'https://server13.mp3quran.net/jhn/',    ayah: 'ar.abdullahjuhany' },
+  { id: 'yasser',  name: 'ياسر الدوسري',               server: 'https://server11.mp3quran.net/yasser/', ayah: 'ar.yasser' },
+  { id: 'sgmd',    name: 'سعد الغامدي',                server: 'https://server7.mp3quran.net/s_gmd/',   ayah: 'ar.saadalghamdi' },
+  { id: 'hthfi',   name: 'علي بن عبدالرحمن الحذيفي',   server: 'https://server9.mp3quran.net/hthfi/',   ayah: 'ar.hudhaify' },
+  { id: 'mtrod',   name: 'عبدالله المطرود',            server: 'https://server8.mp3quran.net/mtrod/',   ayah: 'ar.muhammadayyoub' },
+  { id: 'akdr',    name: 'إبراهيم الأخضر',             server: 'https://server6.mp3quran.net/akdr/',    ayah: 'ar.ibrahimakhbar' },
+  { id: 'lhdan',   name: 'محمد اللحيدان',              server: 'https://server8.mp3quran.net/lhdan/',   ayah: 'ar.alhuthaify' }
 ];
 const reciterUrl = (rid, surahNum) => {
   const r = RECITERS.find(x => x.id === rid) || RECITERS[0];
   return `${r.server}${String(surahNum).padStart(3, '0')}.mp3`;
+};
+const ayahAudioUrl = (rid, ayahGlobalNum) => {
+  const r = RECITERS.find(x => x.id === rid) || RECITERS[0];
+  return `https://cdn.islamic.network/quran/audio/128/${r.ayah}/${ayahGlobalNum}.mp3`;
 };
 
 const SurahIndex = ({ data, surahPages, openSurah, currentSurahNum }) => {
@@ -597,9 +685,26 @@ const QuranSection = () => {
   const audioRef = useRef(null);
   const [surahPages, setSurahPages] = useState(null);
   const [dragX, setDragX] = useState(0);
+  const [showMemorize, setShowMemorize] = useState(false);
   const pageStr = String(page).padStart(3, '0');
+  const reciterName = (RECITERS.find(r => r.id === reciter) || RECITERS[0]).name;
 
   useEffect(() => { try { localStorage.setItem('islam_reciter', reciter); } catch {} }, [reciter]);
+
+  // Preload neighbouring pages so swipes feel instant
+  useEffect(() => {
+    const offsets = [-2, -1, 1, 2, 3];
+    const created = [];
+    for (const off of offsets) {
+      const p = page + off;
+      if (p >= 1 && p <= 604) {
+        const img = new Image();
+        img.src = `/quran/${String(p).padStart(3, '0')}.png`;
+        created.push(img);
+      }
+    }
+    return () => { created.length = 0; };
+  }, [page]);
 
   const currentSurahNum = pagesMap && pagesMap[page] && pagesMap[page][0] ? pagesMap[page][0].s : null;
   const currentSurah = currentSurahNum && data ? data.surahs.find(s => s.n === currentSurahNum) : null;
@@ -721,40 +826,73 @@ const QuranSection = () => {
 
       {view === 'mushaf' && (
         <div style={{ textAlign: 'center' }}>
+          {/* Compact info strip — reciter, surah, page */}
+          <div style={{
+            background: `linear-gradient(135deg, ${C.accent} 0%, ${C.accentLight} 100%)`,
+            color: '#fff', borderRadius: 12, padding: '10px 12px', marginBottom: 10,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+            boxShadow: C.shadow, fontSize: 13
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+              <div style={{ fontSize: 10, opacity: 0.85 }}>القارئ</div>
+              <div style={{ fontWeight: 'bold', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{reciterName}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flex: 1 }}>
+              <div style={{ fontSize: 10, opacity: 0.85 }}>السورة</div>
+              <div style={{ fontWeight: 'bold', fontSize: 13 }}>{currentSurah ? currentSurah.name.replace('سُورَةُ ', '').replace('ٱ', 'ا') : '—'}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+              <div style={{ fontSize: 10, opacity: 0.85 }}>الصفحة</div>
+              <div style={{ fontWeight: 'bold', fontSize: 13 }}>{page} / 604</div>
+            </div>
+          </div>
+
+          {/* Audio control row */}
           <div style={{
             background: C.surface, border: `1px solid ${C.border}`,
-            borderRadius: 14, padding: 10, marginBottom: 10,
-            display: 'flex', alignItems: 'center', gap: 8,
+            borderRadius: 12, padding: 8, marginBottom: 10,
+            display: 'flex', alignItems: 'center', gap: 6,
             boxShadow: C.shadow
           }}>
             <button onClick={playSurah} disabled={!currentSurahNum || audioState === 'loading'} style={{
               background: audioState === 'playing' ? C.red : C.accent,
               color: '#fff',
-              border: 'none', padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
-              fontWeight: 'bold', fontSize: 14, minWidth: 96,
+              border: 'none', padding: '9px 12px', borderRadius: 9, cursor: 'pointer',
+              fontWeight: 'bold', fontSize: 13, minWidth: 80,
               boxShadow: '0 2px 8px rgba(15,107,95,0.25)'
             }}>
-              {audioState === 'loading' ? '... جاري' : audioState === 'playing' ? 'إيقاف' : 'تلاوة'}
+              {audioState === 'loading' ? '...' : audioState === 'playing' ? 'إيقاف' : 'تلاوة'}
             </button>
             <select value={reciter} onChange={e => setReciter(e.target.value)} style={{
               flex: 1, background: C.surfaceAlt, color: C.text, border: `1px solid ${C.border}`,
-              padding: '10px', borderRadius: 10, fontSize: 13, fontFamily: 'inherit'
+              padding: '9px', borderRadius: 9, fontSize: 13, fontFamily: 'inherit', minWidth: 0
             }}>
               {RECITERS.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
+            <button
+              onClick={() => { if (pagesMap && pagesMap[page]) setAyahPicker({ page }); }}
+              title="اختر آية للاستماع أو التفسير"
+              style={{
+                background: C.gold, color: '#fff', border: 'none', padding: '9px 12px',
+                borderRadius: 9, cursor: 'pointer', fontWeight: 'bold', fontSize: 13, whiteSpace: 'nowrap'
+              }}
+            >آية</button>
           </div>
-          {currentSurah && (
-            <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>
-              السورة الحالية: <span style={{ color: C.accent, fontWeight: 'bold' }}>{currentSurah.name}</span>
-            </div>
-          )}
-          <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+
+          <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <button onClick={goPrev} disabled={page <= 1} style={{ ...btnStyle, opacity: page <= 1 ? 0.4 : 1 }}>السابق →</button>
-            <div style={{ color: C.accent, fontSize: 14, fontWeight: 'bold' }}>صفحة {page} / 604</div>
+            <button
+              onClick={() => setShowMemorize(true)}
+              disabled={!currentSurahNum}
+              style={{
+                background: C.accent, color: '#fff', border: 'none',
+                padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', fontSize: 12,
+                opacity: currentSurahNum ? 1 : 0.5
+              }}>اختبر حفظك</button>
             <button onClick={goNext} disabled={page >= 604} style={{ ...btnStyle, opacity: page >= 604 ? 0.4 : 1 }}>← التالي</button>
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
-            اسحب يميناً للصفحة التالية أو يساراً للسابقة • اضغط مطوّلاً لعرض تفسير الآيات
+            اسحب للتنقّل • اضغط على زر "آية" أو اضغط مطوّلاً للاستماع لآية معيّنة وعرض تفسيرها
           </div>
 
           <div
@@ -779,18 +917,18 @@ const QuranSection = () => {
               draggable={false}
               style={{
                 display: 'block', width: '100%', height: 'auto',
-                maxHeight: '85vh', objectFit: 'contain',
+                minHeight: '60vh', maxHeight: '95vh', objectFit: 'contain',
                 transform: `translateX(${dragX}px)`,
-                transition: dragX === 0 ? 'transform 0.22s cubic-bezier(.2,.8,.2,1)' : 'none',
-                animation: dragX === 0 ? `pageFlip${flipDir < 0 ? 'L' : 'R'} 0.22s cubic-bezier(.2,.8,.2,1)` : 'none',
+                transition: dragX === 0 ? 'transform 0.18s cubic-bezier(.2,.8,.2,1)' : 'none',
+                animation: dragX === 0 ? `pageFlip${flipDir < 0 ? 'L' : 'R'} 0.18s cubic-bezier(.2,.8,.2,1)` : 'none',
                 pointerEvents: 'none'
               }}
             />
           </div>
 
           <style>{`
-            @keyframes pageFlipL { from { transform: translateX(28%); opacity: 0.4; } to { transform: translateX(0); opacity: 1; } }
-            @keyframes pageFlipR { from { transform: translateX(-28%); opacity: 0.4; } to { transform: translateX(0); opacity: 1; } }
+            @keyframes pageFlipL { from { transform: translateX(28%); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
+            @keyframes pageFlipR { from { transform: translateX(-28%); opacity: 0.5; } to { transform: translateX(0); opacity: 1; } }
           `}</style>
 
           <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8 }}>
@@ -817,19 +955,88 @@ const QuranSection = () => {
           page={ayahPicker.page}
           pagesMap={pagesMap}
           data={data}
+          reciter={reciter}
           onClose={() => setAyahPicker(null)}
+        />
+      )}
+
+      {showMemorize && data && currentSurah && (
+        <MemorizationModal
+          surah={currentSurah}
+          data={data}
+          reciter={reciter}
+          onClose={() => setShowMemorize(false)}
+          onPickSurah={(s) => {
+            setShowMemorize(false);
+            if (surahPages && surahPages[s.n]) setPage(surahPages[s.n]);
+            setTimeout(() => setShowMemorize(true), 50);
+          }}
         />
       )}
     </div>
   );
 };
 
-const AyahTafsirModal = ({ page, pagesMap, data, onClose }) => {
+// Computes the global ayah number (1..6236) from (surah, ayah) using surahs metadata
+const globalAyahNum = (surahs, surahN, ayahN) => {
+  if (!surahs) return null;
+  let total = 0;
+  for (const s of surahs) {
+    if (s.n === surahN) return total + ayahN;
+    total += s.ayahs || 0;
+  }
+  return null;
+};
+
+const AyahTafsirModal = ({ page, pagesMap, data, onClose, reciter }) => {
   const ayahs = pagesMap[page] || [];
   const [sel, setSel] = useState(ayahs[0] || null);
+  const [repeat, setRepeat] = useState(() => parseInt(localStorage.getItem('islam_ayah_repeat') || '1', 10) || 1);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const audioRef = useRef(null);
+  const playCountRef = useRef(0);
+
   const surah = sel && data.surahs.find(s => s.n === sel.s);
   const ayahText = sel && data.quran[sel.s] && data.quran[sel.s][sel.a];
   const tafsirText = sel && data.tafsir[sel.s] && data.tafsir[sel.s][sel.a];
+
+  useEffect(() => { try { localStorage.setItem('islam_ayah_repeat', String(repeat)); } catch {} }, [repeat]);
+  useEffect(() => () => { if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } }, []);
+
+  // stop audio when user changes ayah selection
+  useEffect(() => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
+    playCountRef.current = 0;
+    setPlaying(false); setLoading(false);
+  }, [sel?.s, sel?.a]);
+
+  const playAyah = () => {
+    if (!sel) return;
+    if (playing) {
+      if (audioRef.current) audioRef.current.pause();
+      setPlaying(false); playCountRef.current = 0;
+      return;
+    }
+    const gn = globalAyahNum(data.surahs, sel.s, sel.a);
+    if (!gn) return;
+    const url = ayahAudioUrl(reciter, gn);
+    if (!audioRef.current) audioRef.current = new Audio();
+    const a = audioRef.current;
+    a.src = url;
+    setLoading(true);
+    a.oncanplay = () => { setLoading(false); setPlaying(true); };
+    a.onended = () => {
+      playCountRef.current += 1;
+      if (playCountRef.current < repeat) {
+        a.currentTime = 0; a.play().catch(() => {});
+      } else {
+        setPlaying(false); playCountRef.current = 0;
+      }
+    };
+    a.onerror = () => { setPlaying(false); setLoading(false); alert('تعذّر تشغيل صوت الآية، حاول قارئاً آخر'); };
+    a.play().catch(() => { setPlaying(false); setLoading(false); });
+  };
 
   return (
     <div onClick={onClose} style={{
@@ -839,16 +1046,16 @@ const AyahTafsirModal = ({ page, pagesMap, data, onClose }) => {
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         background: C.surface, width: '100%', maxWidth: 720,
-        maxHeight: '85vh', borderRadius: '16px 16px 0 0',
+        maxHeight: '88vh', borderRadius: '16px 16px 0 0',
         border: `1px solid ${C.border}`, overflow: 'auto',
         animation: 'slideUp 0.25s ease-out'
       }}>
         <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
         <div style={{
           position: 'sticky', top: 0, background: C.surface, padding: '14px 16px',
-          borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 2
         }}>
-          <div style={{ color: C.accentLight, fontWeight: 'bold' }}>صفحة {page} — اختر آية</div>
+          <div style={{ color: C.accent, fontWeight: 'bold' }}>صفحة {page} — اختر آية</div>
           <button onClick={onClose} style={{
             background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 22
           }}>✕</button>
@@ -861,8 +1068,8 @@ const AyahTafsirModal = ({ page, pagesMap, data, onClose }) => {
               const sn = data.surahs.find(s => s.n === it.s);
               return (
                 <button key={i} onClick={() => setSel(it)} style={{
-                  background: isSel ? C.accent : C.bg,
-                  color: isSel ? C.bg : C.accentLight,
+                  background: isSel ? C.accent : C.surfaceAlt,
+                  color: isSel ? '#fff' : C.accent,
                   border: `1px solid ${isSel ? C.accent : C.border}`,
                   padding: '6px 10px', borderRadius: 8, cursor: 'pointer',
                   fontSize: 12, fontWeight: 'bold'
@@ -874,26 +1081,43 @@ const AyahTafsirModal = ({ page, pagesMap, data, onClose }) => {
           {sel && (
             <>
               <div style={{
-                background: 'rgba(196,164,89,0.08)', border: `1px solid ${C.border}`,
+                background: C.surfaceAlt, border: `1px solid ${C.border}`,
                 borderRadius: 12, padding: 16, marginBottom: 12
               }}>
                 <div style={{ fontSize: 11, color: C.accent, marginBottom: 8, textAlign: 'center' }}>
                   {surah ? surah.name : ''} — الآية {sel.a}
                 </div>
                 <div style={{
-                  fontSize: 22, lineHeight: 2.2, textAlign: 'center',
-                  fontFamily: '"Amiri", "Scheherazade", serif', color: C.text
+                  fontSize: 24, lineHeight: 2.2, textAlign: 'center',
+                  fontFamily: '"Amiri", "Scheherazade New", serif', color: C.text
                 }}>
                   {ayahText || ''} <span style={{ color: C.accent }}>﴿{sel.a}﴾</span>
+                </div>
+
+                <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button onClick={playAyah} disabled={loading} style={{
+                    background: playing ? C.red : C.accent, color: '#fff',
+                    border: 'none', padding: '10px 18px', borderRadius: 10, cursor: 'pointer',
+                    fontWeight: 'bold', fontSize: 14, minWidth: 130,
+                    boxShadow: '0 2px 8px rgba(15,107,95,0.25)'
+                  }}>
+                    {loading ? '... جاري' : playing ? `جاري التلاوة (${playCountRef.current + 1}/${repeat})` : 'استمع للآية'}
+                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '4px 8px' }}>
+                    <span style={{ fontSize: 12, color: C.muted }}>تكرار:</span>
+                    <button onClick={() => setRepeat(r => Math.max(1, r - 1))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.accent, fontSize: 18, padding: '0 6px' }}>−</button>
+                    <span style={{ minWidth: 22, textAlign: 'center', fontWeight: 'bold', color: C.text }}>{repeat}</span>
+                    <button onClick={() => setRepeat(r => Math.min(99, r + 1))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.accent, fontSize: 18, padding: '0 6px' }}>+</button>
+                  </div>
                 </div>
               </div>
 
               <div style={{
-                background: C.bg, border: `1px solid ${C.border}`,
+                background: C.surface, border: `1px solid ${C.border}`,
                 borderRadius: 12, padding: 16
               }}>
                 <div style={{ fontSize: 12, color: C.accent, marginBottom: 8, fontWeight: 'bold' }}>
-                  📚 التفسير الميسّر
+                  التفسير الميسّر
                 </div>
                 <div style={{ fontSize: 15, lineHeight: 1.9, color: C.text }}>
                   {tafsirText || 'لا يتوفر تفسير لهذه الآية'}
@@ -1373,6 +1597,21 @@ const SadaqahSection = () => {
 
   return (
     <div style={{ color: C.text }}>
+      {/* Branding banner — Sadaqah Jariyah for Ahmed Abdel Hafez */}
+      <div style={{
+        background: `linear-gradient(135deg, ${C.accent} 0%, ${C.accentDark} 100%)`,
+        color: '#fff', padding: '14px 16px', borderRadius: 14, marginBottom: 14,
+        textAlign: 'center', boxShadow: C.shadowLg, border: `1px solid ${C.accentDark}`
+      }}>
+        <div style={{ fontSize: 11, opacity: 0.85, marginBottom: 4, letterSpacing: 1 }}>هذا التطبيق</div>
+        <div style={{ fontSize: 17, fontWeight: 'bold', fontFamily: '"Amiri", "Scheherazade New", serif', lineHeight: 1.6 }}>
+          صَدَقَةٌ جَارِيَةٌ لِأَحْمَد عَبْد الْحَفِيظ
+        </div>
+        <div style={{ fontSize: 11, opacity: 0.85, marginTop: 6 }}>
+          اللهم اغفر له وارحمه وأسكنه فسيح جناتك — اللهم تقبّل
+        </div>
+      </div>
+
       {/* Header stats */}
       <div style={{
         background: `linear-gradient(135deg, ${C.surface} 0%, rgba(196,164,89,0.08) 100%)`,
@@ -1674,56 +1913,9 @@ const AdhkarHub = () => {
   );
 };
 
-const SunnahSection = () => {
-  const [book, setBook] = useState(null);
-  const [section, setSection] = useState(() => parseInt(localStorage.getItem('islam_bukhari_section') || '0', 10) || null);
-  const [query, setQuery] = useState('');
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancel = false;
-    (async () => {
-      try {
-        const res = await fetch('/sunnah/bukhari.json');
-        if (!res.ok) throw new Error('failed');
-        const total = parseInt(res.headers.get('content-length') || '0', 10);
-        if (total && res.body) {
-          const reader = res.body.getReader();
-          const chunks = [];
-          let received = 0;
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunks.push(value);
-            received += value.length;
-            if (!cancel) setProgress(Math.round((received / total) * 100));
-          }
-          const blob = new Blob(chunks);
-          const txt = await blob.text();
-          if (!cancel) setBook(JSON.parse(txt));
-        } else {
-          const j = await res.json();
-          if (!cancel) setBook(j);
-        }
-      } catch (e) {
-        if (!cancel) setError('تعذّر تحميل صحيح البخاري');
-      }
-    })();
-    return () => { cancel = true; };
-  }, []);
-
-  useEffect(() => {
-    if (section != null) { try { localStorage.setItem('islam_bukhari_section', String(section)); } catch {} }
-  }, [section]);
-
-  const stripA = (s) => (s || '')
-    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0610-\u061A]/g, '')
-    .replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
-
-  const sectionNames = useMemo(() => {
-    if (!book) return null;
-    const arabicNames = {
+const SUNNAH_BOOKS = [
+  { id: 'bukhari', file: '/sunnah/bukhari.json', title: 'صحيح البخاري', author: 'الإمام محمد بن إسماعيل البخاري', hasSections: true,
+    sectionNames: {
       1:'بدء الوحي',2:'الإيمان',3:'العلم',4:'الوضوء',5:'الغسل',6:'الحيض',7:'التيمم',8:'الصلاة',
       9:'مواقيت الصلاة',10:'الأذان',11:'الجمعة',12:'صلاة الخوف',13:'العيدين',14:'الوتر',15:'الاستسقاء',
       16:'الكسوف',17:'سجود القرآن',18:'تقصير الصلاة',19:'التهجد',20:'فضل الصلاة في مسجد مكة والمدينة',
@@ -1739,16 +1931,93 @@ const SunnahSection = () => {
       81:'الرقاق',82:'القدر',83:'الأيمان والنذور',84:'كفارات الأيمان',85:'الفرائض',86:'الحدود',
       87:'الديات',88:'استتابة المرتدين',89:'الإكراه',90:'الحيل',91:'التعبير',92:'الفتن',93:'الأحكام',
       94:'التمني',95:'أخبار الآحاد',96:'الاعتصام بالكتاب والسنة',97:'التوحيد'
-    };
+    } },
+  { id: 'muslim', file: '/sunnah/muslim.json', title: 'صحيح مسلم', author: 'الإمام مسلم بن الحجاج', hasSections: true,
+    sectionNames: {
+      1:'الإيمان',2:'الطهارة',3:'الحيض',4:'الصلاة',5:'المساجد ومواضع الصلاة',6:'صلاة المسافرين وقصرها',
+      7:'الجمعة',8:'صلاة العيدين',9:'صلاة الاستسقاء',10:'الكسوف',11:'الجنائز',12:'الزكاة',13:'الصيام',
+      14:'الاعتكاف',15:'الحج',16:'النكاح',17:'الرضاع',18:'الطلاق',19:'اللعان',20:'العتق',
+      21:'البيوع',22:'المساقاة',23:'الفرائض',24:'الهبات',25:'الوصية',26:'النذر',27:'الأيمان',
+      28:'القسامة والمحاربين والقصاص والديات',29:'الحدود',30:'الأقضية',31:'اللقطة',32:'الجهاد والسير',
+      33:'الإمارة',34:'الصيد والذبائح',35:'الأضاحي',36:'الأشربة',37:'اللباس والزينة',38:'الآداب',
+      39:'السلام',40:'ألفاظ من الأدب وغيرها',41:'الشعر',42:'الرؤيا',43:'الفضائل',44:'فضائل الصحابة',
+      45:'البر والصلة والآداب',46:'القدر',47:'العلم',48:'الذكر والدعاء والتوبة والاستغفار',49:'التوبة',
+      50:'صفات المنافقين وأحكامهم',51:'صفة القيامة والجنة والنار',52:'الجنة وصفة نعيمها وأهلها',
+      53:'الفتن وأشراط الساعة',54:'الزهد والرقائق',55:'التفسير',56:'فضائل القرآن وما يتعلق به',57:'مقدمة'
+    } },
+  { id: 'nawawi', file: '/sunnah/nawawi.json', title: 'الأربعون النوويّة', author: 'الإمام يحيى بن شرف النووي', hasSections: false },
+  { id: 'qudsi',  file: '/sunnah/qudsi.json',  title: 'الأربعون القدسيّة', author: 'أربعون حديثاً قدسياً', hasSections: false }
+];
+
+const SunnahSection = () => {
+  const [bookId, setBookId] = useState(() => localStorage.getItem('islam_sunnah_book') || 'bukhari');
+  const [book, setBook] = useState(null);
+  const [section, setSection] = useState(null);
+  const [query, setQuery] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState('');
+  const cache = useRef({});
+
+  const meta = SUNNAH_BOOKS.find(b => b.id === bookId) || SUNNAH_BOOKS[0];
+
+  useEffect(() => { try { localStorage.setItem('islam_sunnah_book', bookId); } catch {} }, [bookId]);
+
+  useEffect(() => {
+    if (cache.current[bookId]) {
+      setBook(cache.current[bookId]);
+      setError(''); setProgress(100);
+      return;
+    }
+    let cancel = false;
+    setBook(null); setError(''); setProgress(0); setSection(null); setQuery('');
+    (async () => {
+      try {
+        const res = await fetch(meta.file);
+        if (!res.ok) throw new Error('failed');
+        const total = parseInt(res.headers.get('content-length') || '0', 10);
+        if (total && res.body) {
+          const reader = res.body.getReader();
+          const chunks = [];
+          let received = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            if (!cancel) setProgress(Math.round((received / total) * 100));
+          }
+          const blob = new Blob(chunks);
+          const txt = await blob.text();
+          const j = JSON.parse(txt);
+          cache.current[bookId] = j;
+          if (!cancel) setBook(j);
+        } else {
+          const j = await res.json();
+          cache.current[bookId] = j;
+          if (!cancel) setBook(j);
+        }
+      } catch (e) {
+        if (!cancel) setError('تعذّر تحميل ' + meta.title);
+      }
+    })();
+    return () => { cancel = true; };
+  }, [bookId]);
+
+  const stripA = (s) => (s || '')
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0610-\u061A]/g, '')
+    .replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
+
+  const sectionNames = useMemo(() => {
+    if (!book || !meta.hasSections) return null;
     const out = [];
     const sections = book.metadata?.sections || {};
     for (const k of Object.keys(sections)) {
       const id = parseInt(k, 10);
       if (!id) continue;
-      out.push({ id, name: arabicNames[id] || sections[k] || `كتاب ${id}` });
+      out.push({ id, name: meta.sectionNames[id] || sections[k] || `كتاب ${id}` });
     }
     return out.sort((a, b) => a.id - b.id);
-  }, [book]);
+  }, [book, meta]);
 
   const sectionHadiths = useMemo(() => {
     if (!book || section == null) return [];
@@ -1768,43 +2037,65 @@ const SunnahSection = () => {
     return out;
   }, [book, query]);
 
+  const BookSwitcher = (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 12 }}>
+      {SUNNAH_BOOKS.map(b => (
+        <button key={b.id} onClick={() => { setBookId(b.id); setSection(null); setQuery(''); }} style={{
+          background: bookId === b.id ? C.accent : C.surface,
+          color: bookId === b.id ? '#fff' : C.text,
+          border: `1px solid ${bookId === b.id ? C.accent : C.border}`,
+          padding: '10px 8px', borderRadius: 10, cursor: 'pointer',
+          fontWeight: 'bold', fontSize: 12, fontFamily: 'inherit',
+          boxShadow: bookId === b.id ? '0 2px 8px rgba(15,107,95,0.25)' : C.shadow
+        }}>{b.title}</button>
+      ))}
+    </div>
+  );
+
   if (error) {
-    return <div style={{ color: C.red, textAlign: 'center', padding: 30 }}>{error}</div>;
+    return (
+      <div>
+        {BookSwitcher}
+        <div style={{ color: C.red, textAlign: 'center', padding: 30 }}>{error}</div>
+      </div>
+    );
   }
   if (!book) {
     return (
-      <div style={{ textAlign: 'center', padding: 40, color: C.muted }}>
-        <div style={{ marginBottom: 12, fontSize: 15 }}>جاري تحميل صحيح البخاري...</div>
-        <div style={{
-          width: '100%', maxWidth: 280, height: 8, margin: '0 auto',
-          background: C.surfaceAlt, borderRadius: 4, overflow: 'hidden',
-          border: `1px solid ${C.border}`
-        }}>
+      <div>
+        {BookSwitcher}
+        <div style={{ textAlign: 'center', padding: 40, color: C.muted }}>
+          <div style={{ marginBottom: 12, fontSize: 15 }}>جاري تحميل {meta.title}...</div>
           <div style={{
-            width: `${progress}%`, height: '100%', background: C.accent,
-            transition: 'width 0.2s ease'
-          }} />
-        </div>
-        <div style={{ marginTop: 8, fontSize: 12 }}>{progress}%</div>
-        <div style={{ marginTop: 14, fontSize: 11, color: C.sub }}>
-          سيتم تحميل الكتاب لمرة واحدة فقط ثم يحفظ في المتصفح
+            width: '100%', maxWidth: 280, height: 8, margin: '0 auto',
+            background: C.surfaceAlt, borderRadius: 4, overflow: 'hidden',
+            border: `1px solid ${C.border}`
+          }}>
+            <div style={{
+              width: `${progress}%`, height: '100%', background: C.accent,
+              transition: 'width 0.2s ease'
+            }} />
+          </div>
+          <div style={{ marginTop: 8, fontSize: 12 }}>{progress}%</div>
+          <div style={{ marginTop: 14, fontSize: 11, color: C.sub }}>
+            يحفظ في الذاكرة بعد التحميل ولن يعاد تحميله
+          </div>
         </div>
       </div>
     );
   }
 
-  if (!sectionNames) return null;
-
   return (
     <div>
+      {BookSwitcher}
       <div style={{
         background: C.surface, border: `1px solid ${C.border}`,
         borderRadius: 12, padding: 12, marginBottom: 12,
         textAlign: 'center', boxShadow: C.shadow
       }}>
-        <div style={{ color: C.accent, fontWeight: 'bold', fontSize: 16 }}>صحيح البخاري</div>
+        <div style={{ color: C.accent, fontWeight: 'bold', fontSize: 16 }}>{meta.title}</div>
         <div style={{ color: C.muted, fontSize: 12, marginTop: 4 }}>
-          الإمام محمد بن إسماعيل البخاري • {book.hadiths.length} حديث في {sectionNames.length} كتاب
+          {meta.author} • {book.hadiths.length} حديث{meta.hasSections && sectionNames ? ` في ${sectionNames.length} كتاب` : ''}
         </div>
       </div>
 
@@ -1812,7 +2103,7 @@ const SunnahSection = () => {
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="ابحث في أحاديث صحيح البخاري..."
+          placeholder={`ابحث في أحاديث ${meta.title}...`}
           style={{
             width: '100%', padding: '12px 36px 12px 12px', boxSizing: 'border-box',
             background: C.surface, color: C.text,
@@ -1835,9 +2126,15 @@ const SunnahSection = () => {
           </div>
           <div style={{ display: 'grid', gap: 10 }}>
             {searchResults.map((h, i) => (
-              <HadithCard key={i} h={h} sectionNames={sectionNames} onOpenBook={(b) => { setQuery(''); setSection(b); }} />
+              <HadithCard key={i} h={h} sectionNames={sectionNames} onOpenBook={meta.hasSections ? (b) => { setQuery(''); setSection(b); } : undefined} />
             ))}
           </div>
+        </div>
+      ) : !meta.hasSections ? (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {book.hadiths.map((h, i) => (
+            <HadithCard key={i} h={h} sectionNames={null} hideBookLink />
+          ))}
         </div>
       ) : section ? (
         <div>
@@ -2053,6 +2350,550 @@ const AdhkarSection = () => {
   );
 };
 
+// ───────────────────────── SettingsPanel ─────────────────────────
+const SettingsPanel = ({ settings, setSettings, onClose }) => {
+  const update = (k, v) => setSettings(s => ({ ...s, [k]: v }));
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1100,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.surface, width: '100%', maxWidth: 720,
+        maxHeight: '90vh', borderRadius: '18px 18px 0 0',
+        border: `1px solid ${C.border}`, overflow: 'auto',
+        animation: 'slideUp 0.25s ease-out'
+      }}>
+        <div style={{
+          position: 'sticky', top: 0, background: C.surface, padding: '16px',
+          borderBottom: `1px solid ${C.border}`, display: 'flex',
+          justifyContent: 'space-between', alignItems: 'center', zIndex: 2
+        }}>
+          <div style={{ color: C.accent, fontWeight: 'bold', fontSize: 18 }}>الإعدادات</div>
+          <button onClick={onClose} style={{
+            background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 22
+          }}>✕</button>
+        </div>
+
+        <div style={{ padding: 16, display: 'grid', gap: 18 }}>
+          {/* Theme */}
+          <div>
+            <div style={{ color: C.text, fontWeight: 'bold', marginBottom: 10, fontSize: 14 }}>المظهر</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[
+                { id: 'light', label: 'فاتح', preview: { bg: '#f5f1ea', fg: '#0f6b5f' } },
+                { id: 'dark',  label: 'داكن',  preview: { bg: '#0c1419', fg: '#3aae9d' } }
+              ].map(t => (
+                <button key={t.id} onClick={() => update('theme', t.id)} style={{
+                  background: t.preview.bg, color: t.preview.fg,
+                  border: `2px solid ${settings.theme === t.id ? C.accent : C.border}`,
+                  padding: '14px 10px', borderRadius: 12, cursor: 'pointer',
+                  fontWeight: 'bold', fontSize: 14, fontFamily: 'inherit',
+                  boxShadow: settings.theme === t.id ? '0 4px 14px rgba(15,107,95,0.25)' : 'none'
+                }}>{t.label}{settings.theme === t.id ? ' ✓' : ''}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Font family */}
+          <div>
+            <div style={{ color: C.text, fontWeight: 'bold', marginBottom: 10, fontSize: 14 }}>الخط</div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {FONT_FAMILIES.map(f => (
+                <button key={f.id} onClick={() => update('fontId', f.id)} style={{
+                  background: settings.fontId === f.id ? C.accent : C.surfaceAlt,
+                  color: settings.fontId === f.id ? '#fff' : C.text,
+                  border: `1px solid ${settings.fontId === f.id ? C.accent : C.border}`,
+                  padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
+                  fontFamily: f.stack, fontSize: 15, fontWeight: 'bold',
+                  textAlign: 'right'
+                }}>{f.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Font size */}
+          <div>
+            <div style={{ color: C.text, fontWeight: 'bold', marginBottom: 10, fontSize: 14 }}>حجم الخط</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              {FONT_SIZES.map(s => (
+                <button key={s.id} onClick={() => update('sizeId', s.id)} style={{
+                  background: settings.sizeId === s.id ? C.accent : C.surfaceAlt,
+                  color: settings.sizeId === s.id ? '#fff' : C.text,
+                  border: `1px solid ${settings.sizeId === s.id ? C.accent : C.border}`,
+                  padding: `${4 + s.px / 2}px 6px`, borderRadius: 10, cursor: 'pointer',
+                  fontSize: s.px - 2, fontWeight: 'bold', fontFamily: 'inherit'
+                }}>{s.label}</button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{
+            background: C.surfaceAlt, border: `1px solid ${C.border}`,
+            borderRadius: 12, padding: 12, fontSize: 12, color: C.muted, lineHeight: 1.7
+          }}>
+            تُحفظ إعداداتك تلقائياً في هذا المتصفح. اختيار "خط أميري" أو "شهرزاد" مناسب لقراءة القرآن، و"القاهرة" أو "تجوّال" أوضح للأذكار والقوائم.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ───────────────────────── TasbihSection ─────────────────────────
+const TASBIH_PRESETS = [
+  { id: 'subh',     text: 'سُبْحَانَ اللهِ',                          target: 33  },
+  { id: 'hamd',     text: 'الْحَمْدُ لِلَّهِ',                         target: 33  },
+  { id: 'akbar',    text: 'اللهُ أَكْبَرُ',                           target: 34  },
+  { id: 'tahlil',   text: 'لَا إِلَهَ إِلَّا اللهُ',                   target: 100 },
+  { id: 'hawqala',  text: 'لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ', target: 100 },
+  { id: 'istighfar',text: 'أَسْتَغْفِرُ اللهَ وَأَتُوبُ إِلَيْهِ',     target: 100 },
+  { id: 'salat',    text: 'اللَّهُمَّ صَلِّ وَسَلِّمْ عَلَى نَبِيِّنَا مُحَمَّدٍ', target: 100 },
+  { id: 'subh_bihamd', text: 'سُبْحَانَ اللهِ وَبِحَمْدِهِ',            target: 100 },
+  { id: 'subh_azim',   text: 'سُبْحَانَ اللهِ الْعَظِيمِ',              target: 100 },
+  { id: 'unique',   text: 'سُبْحَانَ اللهِ وَبِحَمْدِهِ، سُبْحَانَ اللهِ الْعَظِيمِ', target: 10 },
+  { id: 'hasbi',    text: 'حَسْبِيَ اللهُ لَا إِلَهَ إِلَّا هُوَ، عَلَيْهِ تَوَكَّلْتُ وَهُوَ رَبُّ الْعَرْشِ الْعَظِيمِ', target: 7 }
+];
+
+const TasbihSection = () => {
+  const [items, setItems] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('islam_tasbih_v2') || 'null');
+      if (Array.isArray(saved) && saved.length) return saved;
+    } catch {}
+    return TASBIH_PRESETS.map(p => ({ ...p, count: 0, total: 0 }));
+  });
+  const [activeId, setActiveId] = useState(() => localStorage.getItem('islam_tasbih_active') || 'subh');
+  const [vibrate, setVibrate] = useState(() => localStorage.getItem('islam_tasbih_vib') !== '0');
+
+  useEffect(() => { try { localStorage.setItem('islam_tasbih_v2', JSON.stringify(items)); } catch {} }, [items]);
+  useEffect(() => { try { localStorage.setItem('islam_tasbih_active', activeId); } catch {} }, [activeId]);
+  useEffect(() => { try { localStorage.setItem('islam_tasbih_vib', vibrate ? '1' : '0'); } catch {} }, [vibrate]);
+
+  const active = items.find(i => i.id === activeId) || items[0];
+  const totalAll = items.reduce((a, b) => a + b.total, 0);
+
+  const tap = () => {
+    setItems(arr => arr.map(i => {
+      if (i.id !== active.id) return i;
+      const nextCount = (i.count || 0) + 1;
+      const reachedTarget = i.target && nextCount % i.target === 0;
+      if (reachedTarget && vibrate && navigator.vibrate) { try { navigator.vibrate([60, 30, 60]); } catch {} }
+      else if (vibrate && navigator.vibrate) { try { navigator.vibrate(15); } catch {} }
+      return { ...i, count: nextCount, total: (i.total || 0) + 1 };
+    }));
+  };
+
+  const reset = () => {
+    setItems(arr => arr.map(i => i.id === active.id ? { ...i, count: 0 } : i));
+  };
+  const resetAll = () => {
+    if (!confirm('هل تريد تصفير كل العدّادات؟')) return;
+    setItems(arr => arr.map(i => ({ ...i, count: 0, total: 0 })));
+  };
+
+  const progress = active.target ? Math.min(100, ((active.count % active.target) / active.target) * 100) : 0;
+  const cycles = active.target ? Math.floor(active.count / active.target) : 0;
+
+  return (
+    <div>
+      <div style={{
+        background: `linear-gradient(135deg, ${C.accent} 0%, ${C.accentLight} 100%)`,
+        color: '#fff', borderRadius: 14, padding: 14, marginBottom: 12,
+        textAlign: 'center', boxShadow: C.shadow
+      }}>
+        <div style={{ fontSize: 11, opacity: 0.85 }}>إجمالي ما سُبِّح في هذا الجهاز</div>
+        <div style={{ fontSize: 28, fontWeight: 'bold', marginTop: 4 }}>{totalAll.toLocaleString('ar-EG')}</div>
+        <div style={{ fontSize: 11, marginTop: 4, opacity: 0.85 }}>اللهم تقبل</div>
+      </div>
+
+      {/* Big tap button + selected dhikr */}
+      <div style={{
+        background: C.surface, border: `1px solid ${C.border}`,
+        borderRadius: 16, padding: 16, marginBottom: 12, boxShadow: C.shadow
+      }}>
+        <div style={{
+          fontSize: 22, lineHeight: 2.0, color: C.text, textAlign: 'center',
+          fontFamily: '"Amiri", "Scheherazade New", serif', minHeight: 80,
+          padding: '12px 8px'
+        }}>
+          {active.text}
+        </div>
+
+        <button
+          onClick={tap}
+          style={{
+            display: 'block', width: 200, height: 200, margin: '12px auto',
+            borderRadius: '50%', border: 'none', cursor: 'pointer',
+            background: `radial-gradient(circle at 30% 30%, ${C.accentLight} 0%, ${C.accent} 60%, ${C.accentDark} 100%)`,
+            color: '#fff', fontSize: 64, fontWeight: 'bold',
+            boxShadow: `0 12px 32px rgba(15,107,95,0.4), inset 0 -6px 0 ${C.accentDark}`,
+            transition: 'transform 0.08s ease',
+            WebkitTapHighlightColor: 'transparent', userSelect: 'none'
+          }}
+          onTouchStart={(e) => { e.currentTarget.style.transform = 'scale(0.94)'; }}
+          onTouchEnd={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.94)'; }}
+          onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+        >
+          {active.count}
+        </button>
+
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.muted, marginBottom: 4 }}>
+            <span>الهدف الواحد: {active.target}</span>
+            <span>الدورات المكتملة: {cycles}</span>
+          </div>
+          <div style={{
+            width: '100%', height: 8, background: C.surfaceAlt, borderRadius: 4,
+            overflow: 'hidden', border: `1px solid ${C.border}`
+          }}>
+            <div style={{
+              width: `${progress}%`, height: '100%',
+              background: `linear-gradient(90deg, ${C.accentLight}, ${C.accent})`,
+              transition: 'width 0.18s ease'
+            }} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button onClick={reset} style={{
+            flex: 1, background: C.surfaceAlt, color: C.accent, border: `1px solid ${C.border}`,
+            padding: '10px', borderRadius: 10, cursor: 'pointer', fontWeight: 'bold', fontSize: 13, fontFamily: 'inherit'
+          }}>تصفير العداد</button>
+          <button onClick={() => setVibrate(v => !v)} style={{
+            background: vibrate ? C.accent : C.surfaceAlt,
+            color: vibrate ? '#fff' : C.muted,
+            border: `1px solid ${vibrate ? C.accent : C.border}`,
+            padding: '10px 14px', borderRadius: 10, cursor: 'pointer', fontWeight: 'bold', fontSize: 12, fontFamily: 'inherit'
+          }}>{vibrate ? 'الاهتزاز مفعّل' : 'تفعيل الاهتزاز'}</button>
+        </div>
+      </div>
+
+      {/* List of presets */}
+      <div style={{ color: C.text, fontWeight: 'bold', marginBottom: 8, fontSize: 14 }}>اختر التسبيحة</div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {items.map(it => (
+          <button key={it.id} onClick={() => setActiveId(it.id)} style={{
+            background: it.id === activeId ? C.accent : C.surface,
+            color: it.id === activeId ? '#fff' : C.text,
+            border: `1px solid ${it.id === activeId ? C.accent : C.border}`,
+            padding: 12, borderRadius: 12, cursor: 'pointer',
+            fontFamily: 'inherit', textAlign: 'right',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
+            boxShadow: it.id === activeId ? '0 2px 10px rgba(15,107,95,0.25)' : C.shadow
+          }}>
+            <div style={{
+              flex: 1, fontFamily: '"Amiri", "Scheherazade New", serif',
+              fontSize: 17, lineHeight: 1.6
+            }}>{it.text}</div>
+            <div style={{
+              background: it.id === activeId ? 'rgba(255,255,255,0.2)' : C.surfaceAlt,
+              color: it.id === activeId ? '#fff' : C.accent,
+              padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 'bold',
+              minWidth: 60, textAlign: 'center', whiteSpace: 'nowrap'
+            }}>{it.total || 0}</div>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ textAlign: 'center', marginTop: 16 }}>
+        <button onClick={resetAll} style={{
+          background: 'transparent', color: C.red, border: `1px solid ${C.red}`,
+          padding: '8px 18px', borderRadius: 10, cursor: 'pointer',
+          fontFamily: 'inherit', fontSize: 12
+        }}>تصفير الكل</button>
+      </div>
+    </div>
+  );
+};
+
+// ───────────────────────── MemorizationModal (AI voice tester) ─────────────────────────
+const normalizeWord = (s) => (s || '')
+  .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0610-\u061A\u06DF-\u06E8]/g, '')
+  .replace(/[إأآٱ]/g, 'ا')
+  .replace(/[ىئ]/g, 'ي')
+  .replace(/ؤ/g, 'و')
+  .replace(/ة/g, 'ه')
+  .replace(/[^\u0621-\u064A]/g, '')
+  .trim();
+
+const MemorizationModal = ({ surah, data, reciter, onClose, onPickSurah }) => {
+  const [showPicker, setShowPicker] = useState(false);
+  const [ayahIdx, setAyahIdx] = useState(0);  // 1-based ayah number, 0 = bismillah/intro
+  const [mode, setMode] = useState('idle');   // idle | listening | result
+  const [transcript, setTranscript] = useState('');
+  const [supported, setSupported] = useState(true);
+  const [permError, setPermError] = useState('');
+  const [autoNext, setAutoNext] = useState(false);
+  const recogRef = useRef(null);
+
+  const ayahs = data.quran[surah.n] || {};
+  const ayahNumbers = Object.keys(ayahs).map(n => parseInt(n, 10)).sort((a, b) => a - b);
+  const currentAyahNum = ayahNumbers[ayahIdx] || ayahNumbers[0] || 1;
+  const currentText = ayahs[currentAyahNum] || '';
+  const expectedWords = useMemo(() => currentText.split(/\s+/).filter(Boolean), [currentText]);
+
+  // Tokenize transcript and align to expected
+  const result = useMemo(() => {
+    if (!transcript) return null;
+    const said = transcript.split(/\s+/).filter(Boolean);
+    const saidNorm = said.map(normalizeWord);
+    const expNorm  = expectedWords.map(normalizeWord);
+    // Greedy alignment: walk through expected, match against next-window of said
+    const out = [];
+    let si = 0;
+    for (let ei = 0; ei < expNorm.length; ei++) {
+      const want = expNorm[ei];
+      let matched = false;
+      // search a small window forward for the word
+      for (let lookahead = 0; lookahead < 4 && si + lookahead < saidNorm.length; lookahead++) {
+        if (saidNorm[si + lookahead] === want && want.length > 0) {
+          si += lookahead + 1;
+          matched = true;
+          break;
+        }
+      }
+      out.push({ word: expectedWords[ei], correct: matched });
+    }
+    const correctCount = out.filter(o => o.correct).length;
+    return { tokens: out, correctCount, total: out.length, percent: Math.round((correctCount / out.length) * 100) };
+  }, [transcript, expectedWords]);
+
+  const startListening = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setSupported(false); return; }
+    setSupported(true); setPermError(''); setTranscript(''); setMode('listening');
+    const r = new SR();
+    r.lang = 'ar-SA';
+    r.continuous = true;
+    r.interimResults = true;
+    r.maxAlternatives = 1;
+    let finalText = '';
+    r.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += ' ' + t;
+        else interim += ' ' + t;
+      }
+      setTranscript((finalText + ' ' + interim).trim());
+    };
+    r.onerror = (e) => {
+      setMode('idle');
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        setPermError('يجب السماح بالميكروفون من إعدادات المتصفح ثم المحاولة مرة أخرى');
+      } else if (e.error === 'no-speech') {
+        setPermError('لم يُكتشف صوت — حاول مرة أخرى');
+      } else {
+        setPermError('خطأ في التسجيل: ' + e.error);
+      }
+    };
+    r.onend = () => {
+      setMode(prev => prev === 'listening' ? 'result' : prev);
+    };
+    recogRef.current = r;
+    try { r.start(); } catch (e) { setMode('idle'); setPermError('فشل بدء التسجيل'); }
+  };
+
+  const stopListening = () => {
+    if (recogRef.current) {
+      try { recogRef.current.stop(); } catch {}
+    }
+  };
+
+  const reset = () => { setTranscript(''); setMode('idle'); setPermError(''); };
+  const next = () => {
+    if (ayahIdx < ayahNumbers.length - 1) {
+      setAyahIdx(i => i + 1);
+      reset();
+    }
+  };
+  const prev = () => {
+    if (ayahIdx > 0) { setAyahIdx(i => i - 1); reset(); }
+  };
+
+  // Stop recognition on unmount
+  useEffect(() => () => { if (recogRef.current) { try { recogRef.current.stop(); } catch {} } }, []);
+
+  // Auto-advance when ayah is recited correctly enough
+  useEffect(() => {
+    if (autoNext && result && result.percent >= 80 && mode === 'result') {
+      const id = setTimeout(() => next(), 1500);
+      return () => clearTimeout(id);
+    }
+  }, [autoNext, result, mode]);
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1100,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.surface, width: '100%', maxWidth: 720,
+        maxHeight: '92vh', borderRadius: '18px 18px 0 0',
+        border: `1px solid ${C.border}`, overflow: 'auto',
+        animation: 'slideUp 0.25s ease-out'
+      }}>
+        <div style={{
+          position: 'sticky', top: 0, background: C.surface, padding: '14px 16px',
+          borderBottom: `1px solid ${C.border}`, display: 'flex',
+          justifyContent: 'space-between', alignItems: 'center', zIndex: 2
+        }}>
+          <div>
+            <div style={{ color: C.accent, fontWeight: 'bold', fontSize: 16 }}>اختبار الحفظ</div>
+            <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+              {surah.name.replace('سُورَةُ ', '').replace('ٱ', 'ا')} — الآية {currentAyahNum} / {ayahNumbers.length}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 22
+          }}>✕</button>
+        </div>
+
+        <div style={{ padding: 14 }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            <button onClick={() => setShowPicker(p => !p)} style={{
+              flex: 1, background: C.surfaceAlt, color: C.accent, border: `1px solid ${C.border}`,
+              padding: '9px', borderRadius: 9, cursor: 'pointer', fontWeight: 'bold', fontSize: 12, fontFamily: 'inherit'
+            }}>تغيير السورة ▾</button>
+            <button onClick={() => setAutoNext(v => !v)} style={{
+              background: autoNext ? C.accent : C.surfaceAlt,
+              color: autoNext ? '#fff' : C.muted,
+              border: `1px solid ${autoNext ? C.accent : C.border}`,
+              padding: '9px 12px', borderRadius: 9, cursor: 'pointer', fontWeight: 'bold', fontSize: 11, fontFamily: 'inherit'
+            }}>{autoNext ? 'الانتقال التلقائي' : 'تشغيل الانتقال التلقائي'}</button>
+          </div>
+
+          {showPicker && onPickSurah && (
+            <div style={{
+              background: C.surfaceAlt, border: `1px solid ${C.border}`,
+              borderRadius: 10, padding: 8, marginBottom: 10, maxHeight: 220, overflow: 'auto'
+            }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {data.surahs.map(s => (
+                  <button key={s.n} onClick={() => { onPickSurah(s); setShowPicker(false); }} style={{
+                    background: s.n === surah.n ? C.accent : C.surface,
+                    color: s.n === surah.n ? '#fff' : C.text,
+                    border: `1px solid ${s.n === surah.n ? C.accent : C.border}`,
+                    padding: '7px 8px', borderRadius: 8, cursor: 'pointer',
+                    fontSize: 12, fontFamily: 'inherit', textAlign: 'right',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
+                  }}>{s.n}. {s.name.replace('سُورَةُ ', '').replace('ٱ', 'ا')}</button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Mushaf-style ayah display with colored words */}
+          <div style={{
+            background: C.surfaceAlt, border: `1px solid ${C.border}`,
+            borderRadius: 14, padding: 18, marginBottom: 12, minHeight: 120
+          }}>
+            <div style={{ fontSize: 11, color: C.muted, textAlign: 'center', marginBottom: 10 }}>
+              {result ? `${result.correctCount} / ${result.total} كلمة صحيحة (${result.percent}%)` : 'اضغط زر التسجيل واقرأ الآية'}
+            </div>
+            <div style={{
+              fontSize: 24, lineHeight: 2.4, textAlign: 'center', direction: 'rtl',
+              fontFamily: '"Amiri", "Scheherazade New", serif', color: C.text
+            }}>
+              {result ? (
+                result.tokens.map((tk, i) => (
+                  <span key={i} style={{
+                    color: tk.correct ? '#1e7d3e' : C.red,
+                    background: tk.correct ? 'rgba(30,125,62,0.1)' : 'rgba(200,69,69,0.12)',
+                    padding: '2px 4px', borderRadius: 4, margin: '0 2px',
+                    textDecoration: tk.correct ? 'none' : 'underline',
+                    textDecorationColor: C.red, textDecorationThickness: 2
+                  }}>{tk.word} </span>
+                ))
+              ) : (
+                <span>{currentText} <span style={{ color: C.accent }}>﴿{currentAyahNum}﴾</span></span>
+              )}
+            </div>
+            {transcript && (
+              <div style={{
+                marginTop: 14, padding: 10, background: C.surface, borderRadius: 10,
+                fontSize: 13, color: C.muted, border: `1px solid ${C.border}`
+              }}>
+                <div style={{ fontSize: 10, color: C.sub, marginBottom: 4 }}>ما سمعه التطبيق:</div>
+                <div style={{ fontFamily: '"Amiri", serif', fontSize: 16, lineHeight: 1.7, color: C.text }}>{transcript}</div>
+              </div>
+            )}
+          </div>
+
+          {!supported && (
+            <div style={{
+              background: 'rgba(200,69,69,0.1)', border: `1px solid ${C.red}`,
+              borderRadius: 10, padding: 12, marginBottom: 12, color: C.red, fontSize: 13, lineHeight: 1.7
+            }}>
+              متصفحك لا يدعم التعرف على الصوت. جرّب فتح التطبيق في Chrome أو Safari على هاتف حديث.
+            </div>
+          )}
+          {permError && (
+            <div style={{
+              background: 'rgba(200,69,69,0.1)', border: `1px solid ${C.red}`,
+              borderRadius: 10, padding: 12, marginBottom: 12, color: C.red, fontSize: 13
+            }}>{permError}</div>
+          )}
+
+          {/* Controls */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <button onClick={prev} disabled={ayahIdx === 0} style={{
+              background: C.surface, color: C.accent, border: `1px solid ${C.border}`,
+              padding: '12px 16px', borderRadius: 10, cursor: 'pointer',
+              fontWeight: 'bold', fontSize: 13, fontFamily: 'inherit',
+              opacity: ayahIdx === 0 ? 0.4 : 1
+            }}>السابقة →</button>
+
+            {mode === 'listening' ? (
+              <button onClick={stopListening} style={{
+                flex: 1, background: C.red, color: '#fff', border: 'none',
+                padding: '14px', borderRadius: 10, cursor: 'pointer',
+                fontWeight: 'bold', fontSize: 14, fontFamily: 'inherit',
+                animation: 'pulse 1.2s ease-in-out infinite'
+              }}>● جاري التسجيل — اضغط للإيقاف</button>
+            ) : (
+              <button onClick={startListening} style={{
+                flex: 1, background: C.accent, color: '#fff', border: 'none',
+                padding: '14px', borderRadius: 10, cursor: 'pointer',
+                fontWeight: 'bold', fontSize: 14, fontFamily: 'inherit',
+                boxShadow: '0 2px 10px rgba(15,107,95,0.3)'
+              }}>{result ? 'إعادة الاختبار' : 'بدء التسجيل واقرأ الآية'}</button>
+            )}
+
+            <button onClick={next} disabled={ayahIdx >= ayahNumbers.length - 1} style={{
+              background: C.surface, color: C.accent, border: `1px solid ${C.border}`,
+              padding: '12px 16px', borderRadius: 10, cursor: 'pointer',
+              fontWeight: 'bold', fontSize: 13, fontFamily: 'inherit',
+              opacity: ayahIdx >= ayahNumbers.length - 1 ? 0.4 : 1
+            }}>← التالية</button>
+          </div>
+
+          {result && mode === 'result' && (
+            <button onClick={reset} style={{
+              width: '100%', background: C.surfaceAlt, color: C.text,
+              border: `1px solid ${C.border}`, padding: '10px',
+              borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13
+            }}>مسح وإعادة المحاولة</button>
+          )}
+
+          <div style={{
+            marginTop: 14, padding: 12, background: C.surfaceAlt, borderRadius: 10,
+            fontSize: 11, color: C.muted, lineHeight: 1.7, border: `1px solid ${C.border}`
+          }}>
+            <strong style={{ color: C.text }}>ملاحظة:</strong> يعتمد التطبيق على تعرّف الصوت في متصفحك (مجاني)
+            ودقّته مع تلاوة القرآن قد لا تكون كاملة دائماً، خاصةً عند سرعة القراءة أو ضعف الميكروفون.
+            اقرأ ببطء ووضوح للحصول على أفضل نتيجة. الكلمات الصحيحة تظهر بالأخضر والخاطئة بالأحمر مع كتابة الكلمة الصحيحة.
+          </div>
+        </div>
+
+        <style>{`@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(200,69,69,0.5); } 50% { box-shadow: 0 0 0 8px rgba(200,69,69,0); } }`}</style>
+      </div>
+    </div>
+  );
+};
+
 function LocationBar({ pos, setPos, city, setCity, status, refresh }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -2130,12 +2971,15 @@ function LocationBar({ pos, setPos, city, setCity, status, refresh }) {
 }
 
 export default function IslamicApp() {
+  const [settings, setSettings] = useAppSettings();
+  const [showSettings, setShowSettings] = useState(false);
+  const VALID_TABS = ['prayer','quran','adhkar','tasbih','sadaqah'];
   const [tab, setTab] = useState(() => {
     try {
-      const h = (window.location.hash || '').replace('#', '');
-      if (['prayer','quran','adhkar','sadaqah'].includes(h)) return h;
+      const h = (window.location.hash || '').replace('#', '').split('/')[0];
+      if (VALID_TABS.includes(h)) return h;
       const s = localStorage.getItem('islam_tab');
-      if (['prayer','quran','adhkar','sadaqah'].includes(s)) return s;
+      if (VALID_TABS.includes(s)) return s;
     } catch {}
     return "prayer";
   });
@@ -2203,9 +3047,30 @@ export default function IslamicApp() {
   }, []);
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, direction: "rtl", fontFamily: 'sans-serif', paddingBottom: 80, color: C.text }}>
-      <header style={{ padding: 20, borderBottom: `1px solid ${C.border}`, textAlign: 'center', position: 'sticky', top: 0, background: C.bg, zIndex: 10 }}>
-        <h1 style={{ color: C.accent, fontSize: 20, margin: 0 }}>Islam</h1>
+    <div style={{ minHeight: "100vh", background: C.bg, direction: "rtl", fontFamily: 'var(--app-font)', fontSize: 'var(--app-font-size)', paddingBottom: 80, color: C.text }}>
+      <header style={{
+        padding: '14px 16px', borderBottom: `1px solid ${C.border}`,
+        position: 'sticky', top: 0, background: C.bg, zIndex: 10,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+      }}>
+        <button
+          onClick={() => setShowSettings(true)}
+          aria-label="الإعدادات"
+          style={{
+            background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+            padding: '8px 10px', cursor: 'pointer', color: C.accent,
+            display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontFamily: 'inherit',
+            boxShadow: C.shadow
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6 1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.27.62.86 1.02 1.51 1.02H21a2 2 0 0 1 0 4h-.09c-.65 0-1.24.4-1.51 1z" />
+          </svg>
+          <span>الإعدادات</span>
+        </button>
+        <h1 style={{ color: C.accent, fontSize: 20, margin: 0, fontFamily: '"Amiri", "Scheherazade New", serif' }}>Islam</h1>
+        <div style={{ width: 88 }} />
       </header>
 
       <main style={{ padding: 15, maxWidth: 720, margin: '0 auto' }}>
@@ -2215,24 +3080,42 @@ export default function IslamicApp() {
         {tab === "prayer" && <PrayerTimes pos={pos} />}
         {tab === "quran" && <QuranSection />}
         {tab === "adhkar" && <AdhkarHub />}
+        {tab === "tasbih" && <TasbihSection />}
         {tab === "sadaqah" && <SadaqahSection />}
       </main>
 
-      <nav style={{ position: 'fixed', bottom: 0, width: '100%', background: C.surface, display: 'flex', borderTop: `1px solid ${C.border}` }}>
+      <nav style={{
+        position: 'fixed', bottom: 0, width: '100%', background: C.surface,
+        display: 'flex', borderTop: `1px solid ${C.border}`,
+        boxShadow: '0 -4px 14px rgba(0,0,0,0.05)'
+      }}>
         {[
-          { id: "prayer", label: "الصلاة", icon: "🕌" },
-          { id: "quran", label: "القرآن", icon: "📖" },
-          { id: "adhkar", label: "الأذكار", icon: "📿" },
-          { id: "sadaqah", label: "صدقة جارية", icon: "🤲" }
+          { id: "prayer",  label: "الصلاة",      icon: "🕌" },
+          { id: "quran",   label: "القرآن",      icon: "📖" },
+          { id: "adhkar",  label: "الأذكار",     icon: "📿" },
+          { id: "tasbih",  label: "المسبحة",     icon: "🟢" },
+          { id: "sadaqah", label: "صدقة جارية",  icon: "🤲" }
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
-            flex: 1, padding: 12, background: 'none', border: 'none', color: tab === t.id ? C.accent : C.muted, cursor: 'pointer'
+            flex: 1, padding: '10px 4px', background: 'none', border: 'none',
+            color: tab === t.id ? C.accent : C.muted, cursor: 'pointer',
+            fontFamily: 'inherit', position: 'relative'
           }}>
-            <div style={{ fontSize: 22 }}>{t.icon}</div>
-            <div style={{ fontSize: 11, marginTop: 2 }}>{t.label}</div>
+            <div style={{ fontSize: 20 }}>{t.icon}</div>
+            <div style={{ fontSize: 10, marginTop: 2, fontWeight: tab === t.id ? 'bold' : 'normal' }}>{t.label}</div>
+            {tab === t.id && (
+              <div style={{
+                position: 'absolute', top: 0, left: '20%', right: '20%', height: 3,
+                background: C.accent, borderRadius: '0 0 4px 4px'
+              }} />
+            )}
           </button>
         ))}
       </nav>
+
+      {showSettings && (
+        <SettingsPanel settings={settings} setSettings={setSettings} onClose={() => setShowSettings(false)} />
+      )}
     </div>
   );
 }
