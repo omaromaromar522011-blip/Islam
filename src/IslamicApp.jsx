@@ -562,23 +562,21 @@ const PrayerTimes = ({ pos }) => {
   );
 };
 
+// All reciters verified — surah audio on mp3quran.net AND single-ayah audio on cdn.islamic.network
 const RECITERS = [
-  { id: 'afs',     name: 'مشاري بن راشد العفاسي',     server: 'https://server8.mp3quran.net/afs/',     ayah: 'ar.alafasy' },
-  { id: 'shur',    name: 'سعود الشريم',                server: 'https://server7.mp3quran.net/shur/',    ayah: 'ar.saoodshuraym' },
-  { id: 'sds',     name: 'عبدالرحمن السديس',           server: 'https://server11.mp3quran.net/sds/',    ayah: 'ar.abdurrahmaansudais' },
-  { id: 'husr',    name: 'محمود خليل الحصري',          server: 'https://server13.mp3quran.net/husr/',   ayah: 'ar.husary' },
-  { id: 'minsh',   name: 'محمد صديق المنشاوي',         server: 'https://server10.mp3quran.net/minsh/',  ayah: 'ar.minshawi' },
-  { id: 'basit',   name: 'عبدالباسط عبدالصمد',         server: 'https://server7.mp3quran.net/basit/',   ayah: 'ar.abdulbasitmurattal' },
-  { id: 'qtm',     name: 'ناصر القطامي',               server: 'https://server6.mp3quran.net/qtm/',     ayah: 'ar.nasseralqatami' },
-  { id: 'ajm',     name: 'أحمد بن علي العجمي',         server: 'https://server10.mp3quran.net/ajm/',    ayah: 'ar.ahmedajamy' },
-  { id: 'maher',   name: 'ماهر المعيقلي',              server: 'https://server12.mp3quran.net/maher/',  ayah: 'ar.mahermuaiqly' },
-  { id: 'jhn',     name: 'عبدالله عوّاد الجهني',       server: 'https://server13.mp3quran.net/jhn/',    ayah: 'ar.abdullahjuhany' },
-  { id: 'yasser',  name: 'ياسر الدوسري',               server: 'https://server11.mp3quran.net/yasser/', ayah: 'ar.yasser' },
-  { id: 'sgmd',    name: 'سعد الغامدي',                server: 'https://server7.mp3quran.net/s_gmd/',   ayah: 'ar.saadalghamdi' },
-  { id: 'hthfi',   name: 'علي بن عبدالرحمن الحذيفي',   server: 'https://server9.mp3quran.net/hthfi/',   ayah: 'ar.hudhaify' },
-  { id: 'mtrod',   name: 'عبدالله المطرود',            server: 'https://server8.mp3quran.net/mtrod/',   ayah: 'ar.muhammadayyoub' },
-  { id: 'akdr',    name: 'إبراهيم الأخضر',             server: 'https://server6.mp3quran.net/akdr/',    ayah: 'ar.ibrahimakhbar' },
-  { id: 'lhdan',   name: 'محمد اللحيدان',              server: 'https://server8.mp3quran.net/lhdan/',   ayah: 'ar.alhuthaify' }
+  { id: 'afs',    name: 'مشاري بن راشد العفاسي',   server: 'https://server8.mp3quran.net/afs/',   ayah: 'ar.alafasy' },
+  { id: 'shur',   name: 'سعود الشريم',              server: 'https://server7.mp3quran.net/shur/',  ayah: 'ar.saoodshuraym' },
+  { id: 'sds',    name: 'عبدالرحمن السديس',         server: 'https://server11.mp3quran.net/sds/',  ayah: 'ar.abdurrahmaansudais' },
+  { id: 'husr',   name: 'محمود خليل الحصري',        server: 'https://server13.mp3quran.net/husr/', ayah: 'ar.husary' },
+  { id: 'minsh',  name: 'محمد صديق المنشاوي',       server: 'https://server10.mp3quran.net/minsh/',ayah: 'ar.minshawi' },
+  { id: 'basit',  name: 'عبدالباسط عبدالصمد',       server: 'https://server7.mp3quran.net/basit/', ayah: 'ar.abdulbasitmurattal' },
+  { id: 'ajm',    name: 'أحمد بن علي العجمي',       server: 'https://server10.mp3quran.net/ajm/',  ayah: 'ar.ahmedajamy' },
+  { id: 'maher',  name: 'ماهر المعيقلي',            server: 'https://server12.mp3quran.net/maher/',ayah: 'ar.mahermuaiqly' },
+  { id: 'hthfi',  name: 'علي بن عبدالرحمن الحذيفي', server: 'https://server9.mp3quran.net/hthfi/', ayah: 'ar.hudhaify' },
+  { id: 'akdr',   name: 'إبراهيم الأخضر',           server: 'https://server6.mp3quran.net/akdr/',  ayah: 'ar.ibrahimakhdar' },
+  { id: 'shatri', name: 'أبو بكر الشاطري',          server: 'https://server11.mp3quran.net/shatri/', ayah: 'ar.shaatree' },
+  { id: 'hani',   name: 'هاني الرفاعي',             server: 'https://server8.mp3quran.net/hani/',  ayah: 'ar.hanirifai' },
+  { id: 'ayyub',  name: 'محمد أيوب',                server: 'https://server8.mp3quran.net/ayyub/', ayah: 'ar.muhammadayyoub' }
 ];
 const reciterUrl = (rid, surahNum) => {
   const r = RECITERS.find(x => x.id === rid) || RECITERS[0];
@@ -978,12 +976,13 @@ const QuranSection = () => {
 };
 
 // Computes the global ayah number (1..6236) from (surah, ayah) using surahs metadata
+// Note: surahs.json uses `count` field (not `ayahs`); fall back for safety
 const globalAyahNum = (surahs, surahN, ayahN) => {
   if (!surahs) return null;
   let total = 0;
   for (const s of surahs) {
     if (s.n === surahN) return total + ayahN;
-    total += s.ayahs || 0;
+    total += s.count || s.ayahs || s.numberOfAyahs || 0;
   }
   return null;
 };
@@ -2620,13 +2619,18 @@ const normalizeWord = (s) => (s || '')
 
 const MemorizationModal = ({ surah, data, reciter, onClose, onPickSurah }) => {
   const [showPicker, setShowPicker] = useState(false);
-  const [ayahIdx, setAyahIdx] = useState(0);  // 1-based ayah number, 0 = bismillah/intro
-  const [mode, setMode] = useState('idle');   // idle | listening | result
-  const [transcript, setTranscript] = useState('');
+  const [ayahIdx, setAyahIdx] = useState(0);
+  const [mode, setMode] = useState('idle');           // idle | listening | result
+  const [finalText, setFinalText] = useState('');     // confirmed/finalized words only
+  const [interimText, setInterimText] = useState(''); // current best guess (live)
   const [supported, setSupported] = useState(true);
   const [permError, setPermError] = useState('');
   const [autoNext, setAutoNext] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
   const recogRef = useRef(null);
+  const finalSegmentsRef = useRef([]); // captures finalized result transcripts by index
+  const userStoppedRef = useRef(false);
+  const startedAtRef = useRef(0);
 
   const ayahs = data.quran[surah.n] || {};
   const ayahNumbers = Object.keys(ayahs).map(n => parseInt(n, 10)).sort((a, b) => a - b);
@@ -2634,87 +2638,162 @@ const MemorizationModal = ({ surah, data, reciter, onClose, onPickSurah }) => {
   const currentText = ayahs[currentAyahNum] || '';
   const expectedWords = useMemo(() => currentText.split(/\s+/).filter(Boolean), [currentText]);
 
-  // Tokenize transcript and align to expected
+  const transcript = (finalText + ' ' + interimText).replace(/\s+/g, ' ').trim();
+
+  // Word-level alignment: for each expected word, find the FIRST occurrence in the
+  // remaining said[] from cursor onward. This handles repeated/extra words gracefully.
   const result = useMemo(() => {
-    if (!transcript) return null;
-    const said = transcript.split(/\s+/).filter(Boolean);
-    const saidNorm = said.map(normalizeWord);
+    if (mode !== 'result' || !finalText.trim()) return null;
+    const said = finalText.split(/\s+/).filter(Boolean);
+    const saidNorm = said.map(normalizeWord).filter(w => w.length > 0);
     const expNorm  = expectedWords.map(normalizeWord);
-    // Greedy alignment: walk through expected, match against next-window of said
+
     const out = [];
-    let si = 0;
+    let cursor = 0;
     for (let ei = 0; ei < expNorm.length; ei++) {
       const want = expNorm[ei];
       let matched = false;
-      // search a small window forward for the word
-      for (let lookahead = 0; lookahead < 4 && si + lookahead < saidNorm.length; lookahead++) {
-        if (saidNorm[si + lookahead] === want && want.length > 0) {
-          si += lookahead + 1;
-          matched = true;
-          break;
+      if (want.length > 0) {
+        // Look ahead through ALL remaining said words; cap to a reasonable window
+        const maxLook = Math.min(saidNorm.length - cursor, 8);
+        for (let k = 0; k < maxLook; k++) {
+          const got = saidNorm[cursor + k];
+          // Exact match OR one is a prefix of the other (catches recognizer cutting off ends)
+          if (got === want || (got.length >= 3 && want.length >= 3 && (got.startsWith(want) || want.startsWith(got)))) {
+            cursor += k + 1;
+            matched = true;
+            break;
+          }
         }
       }
       out.push({ word: expectedWords[ei], correct: matched });
     }
     const correctCount = out.filter(o => o.correct).length;
-    return { tokens: out, correctCount, total: out.length, percent: Math.round((correctCount / out.length) * 100) };
-  }, [transcript, expectedWords]);
+    return {
+      tokens: out,
+      correctCount,
+      total: out.length,
+      percent: Math.round((correctCount / Math.max(out.length, 1)) * 100),
+      heard: said.join(' ')
+    };
+  }, [mode, finalText, expectedWords]);
 
-  const startListening = () => {
+  const startListening = async () => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { setSupported(false); return; }
-    setSupported(true); setPermError(''); setTranscript(''); setMode('listening');
+
+    // Warm-up: request mic explicitly so permission prompt is clear (Chrome/Safari)
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // We don't keep the stream — recognition opens its own. Stop tracks immediately.
+        stream.getTracks().forEach(t => t.stop());
+      }
+    } catch (err) {
+      setSupported(true);
+      setPermError('يجب السماح بالميكروفون من المتصفح أولاً ثم اضغط زر التسجيل من جديد.');
+      return;
+    }
+
+    setSupported(true); setPermError('');
+    setFinalText(''); setInterimText('');
+    finalSegmentsRef.current = [];
+    userStoppedRef.current = false;
+    setMode('listening');
+    startedAtRef.current = Date.now();
+    setElapsed(0);
+
     const r = new SR();
     r.lang = 'ar-SA';
     r.continuous = true;
     r.interimResults = true;
     r.maxAlternatives = 1;
-    let finalText = '';
+
     r.onresult = (e) => {
-      let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      // Build the FULL final-only text from results[], so we never duplicate
+      // (events can re-emit the same index when interim → final)
+      let liveInterim = '';
+      for (let i = 0; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalText += ' ' + t;
-        else interim += ' ' + t;
+        if (e.results[i].isFinal) {
+          finalSegmentsRef.current[i] = t;
+        } else if (i >= e.resultIndex) {
+          liveInterim += ' ' + t;
+        }
       }
-      setTranscript((finalText + ' ' + interim).trim());
+      const allFinal = finalSegmentsRef.current.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+      setFinalText(allFinal);
+      setInterimText(liveInterim.trim());
     };
+
     r.onerror = (e) => {
-      setMode('idle');
+      if (e.error === 'no-speech' && !userStoppedRef.current) {
+        // Browser silence-timeout — keep listening if user hasn't pressed stop
+        return;
+      }
+      if (e.error === 'aborted') return;
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        setPermError('يجب السماح بالميكروفون من إعدادات المتصفح ثم المحاولة مرة أخرى');
-      } else if (e.error === 'no-speech') {
-        setPermError('لم يُكتشف صوت — حاول مرة أخرى');
+        setPermError('الإذن للميكروفون مرفوض. افتح إعدادات الموقع في المتصفح وفعّل الميكروفون.');
+        setMode('idle');
+      } else if (e.error === 'audio-capture') {
+        setPermError('لم يتم العثور على ميكروفون. تأكد من توصيل ميكروفون يعمل.');
+        setMode('idle');
+      } else if (e.error === 'network') {
+        setPermError('خدمة التعرّف على الصوت تتطلب اتصال إنترنت. تحقق من الاتصال وحاول مجدداً.');
+        setMode('idle');
       } else {
-        setPermError('خطأ في التسجيل: ' + e.error);
+        setPermError('حدث خطأ في التسجيل: ' + e.error);
       }
     };
+
     r.onend = () => {
-      setMode(prev => prev === 'listening' ? 'result' : prev);
+      // Auto-restart if the engine stopped on its own (Chrome can drop after silence/timeout)
+      if (!userStoppedRef.current) {
+        try { r.start(); return; } catch {}
+      }
+      setMode('result');
     };
+
     recogRef.current = r;
-    try { r.start(); } catch (e) { setMode('idle'); setPermError('فشل بدء التسجيل'); }
+    try {
+      r.start();
+    } catch (e) {
+      setMode('idle');
+      setPermError('فشل بدء التسجيل. حاول مرة أخرى.');
+    }
   };
 
   const stopListening = () => {
+    userStoppedRef.current = true;
     if (recogRef.current) {
       try { recogRef.current.stop(); } catch {}
     }
+    // Safety: if onend doesn't fire within 800ms, force result mode
+    setTimeout(() => setMode(m => m === 'listening' ? 'result' : m), 800);
   };
 
-  const reset = () => { setTranscript(''); setMode('idle'); setPermError(''); };
-  const next = () => {
-    if (ayahIdx < ayahNumbers.length - 1) {
-      setAyahIdx(i => i + 1);
-      reset();
-    }
+  const reset = () => {
+    userStoppedRef.current = true;
+    if (recogRef.current) { try { recogRef.current.abort(); } catch {} }
+    setFinalText(''); setInterimText('');
+    finalSegmentsRef.current = [];
+    setMode('idle'); setPermError(''); setElapsed(0);
   };
-  const prev = () => {
-    if (ayahIdx > 0) { setAyahIdx(i => i - 1); reset(); }
-  };
+  const next = () => { if (ayahIdx < ayahNumbers.length - 1) { setAyahIdx(i => i + 1); reset(); } };
+  const prev = () => { if (ayahIdx > 0) { setAyahIdx(i => i - 1); reset(); } };
+
+  // Live elapsed-time counter while listening
+  useEffect(() => {
+    if (mode !== 'listening') return;
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000)), 250);
+    return () => clearInterval(id);
+  }, [mode]);
 
   // Stop recognition on unmount
-  useEffect(() => () => { if (recogRef.current) { try { recogRef.current.stop(); } catch {} } }, []);
+  useEffect(() => () => {
+    userStoppedRef.current = true;
+    if (recogRef.current) { try { recogRef.current.abort(); } catch {} }
+  }, []);
 
   // Auto-advance when ayah is recited correctly enough
   useEffect(() => {
@@ -2811,13 +2890,23 @@ const MemorizationModal = ({ surah, data, reciter, onClose, onPickSurah }) => {
                 <span>{currentText} <span style={{ color: C.accent }}>﴿{currentAyahNum}﴾</span></span>
               )}
             </div>
-            {transcript && (
+            {(finalText || interimText) && (
               <div style={{
                 marginTop: 14, padding: 10, background: C.surface, borderRadius: 10,
                 fontSize: 13, color: C.muted, border: `1px solid ${C.border}`
               }}>
-                <div style={{ fontSize: 10, color: C.sub, marginBottom: 4 }}>ما سمعه التطبيق:</div>
-                <div style={{ fontFamily: '"Amiri", serif', fontSize: 16, lineHeight: 1.7, color: C.text }}>{transcript}</div>
+                <div style={{ fontSize: 10, color: C.sub, marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
+                  <span>ما سمعه التطبيق:</span>
+                  {mode === 'listening' && <span style={{ color: C.red }}>● يستمع الآن…</span>}
+                </div>
+                <div style={{ fontFamily: '"Amiri", serif', fontSize: 16, lineHeight: 1.8, color: C.text }}>
+                  {finalText && <span>{finalText}</span>}
+                  {interimText && (
+                    <span style={{ color: C.muted, opacity: 0.7, fontStyle: 'italic' }}>
+                      {finalText ? ' ' : ''}{interimText}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -2851,15 +2940,21 @@ const MemorizationModal = ({ surah, data, reciter, onClose, onPickSurah }) => {
                 flex: 1, background: C.red, color: '#fff', border: 'none',
                 padding: '14px', borderRadius: 10, cursor: 'pointer',
                 fontWeight: 'bold', fontSize: 14, fontFamily: 'inherit',
-                animation: 'pulse 1.2s ease-in-out infinite'
-              }}>● جاري التسجيل — اضغط للإيقاف</button>
+                animation: 'pulse 1.2s ease-in-out infinite',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2
+              }}>
+                <span>● اضغط لإيقاف التسجيل</span>
+                <span style={{ fontSize: 11, opacity: 0.9 }}>
+                  {Math.floor(elapsed/60).toString().padStart(2,'0')}:{(elapsed%60).toString().padStart(2,'0')} — اقرأ الآية بصوت واضح
+                </span>
+              </button>
             ) : (
               <button onClick={startListening} style={{
                 flex: 1, background: C.accent, color: '#fff', border: 'none',
                 padding: '14px', borderRadius: 10, cursor: 'pointer',
                 fontWeight: 'bold', fontSize: 14, fontFamily: 'inherit',
                 boxShadow: '0 2px 10px rgba(15,107,95,0.3)'
-              }}>{result ? 'إعادة الاختبار' : 'بدء التسجيل واقرأ الآية'}</button>
+              }}>{result ? '🎙️ إعادة الاختبار' : '🎙️ ابدأ التسجيل واقرأ الآية'}</button>
             )}
 
             <button onClick={next} disabled={ayahIdx >= ayahNumbers.length - 1} style={{
