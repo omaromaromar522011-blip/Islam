@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as adhan from 'adhan';
+import 'leaflet/dist/leaflet.css';
 
 const C = {
   bg:           "var(--c-bg)",
@@ -73,13 +74,22 @@ const FONT_SIZES = [
   { id: 'xl',  label: 'كبير جداً', px: 20 }
 ];
 
+const APP_SETTINGS_DEFAULTS = {
+  theme: 'light',
+  fontId: 'system',
+  sizeId: 'md',
+  prayerMethod: 'auto',     // auto | MWL | Egyptian | UmmAlQura | Karachi | NorthAmerica | Dubai | Qatar | Kuwait | Singapore | Tehran | Turkey
+  madhab: 'shafii',         // shafii | hanafi (affects Asr time)
+  quranReminderEnabled: false,
+  quranReminderTime: '20:00'
+};
 const useAppSettings = () => {
   const [settings, setSettings] = React.useState(() => {
     try {
       const s = JSON.parse(localStorage.getItem('islam_app_settings') || 'null');
-      if (s) return { theme: 'light', fontId: 'system', sizeId: 'md', ...s };
+      if (s) return { ...APP_SETTINGS_DEFAULTS, ...s };
     } catch {}
-    return { theme: 'light', fontId: 'system', sizeId: 'md' };
+    return { ...APP_SETTINGS_DEFAULTS };
   });
   React.useEffect(() => {
     try { localStorage.setItem('islam_app_settings', JSON.stringify(settings)); } catch {}
@@ -182,7 +192,7 @@ function HijriDateBanner({ now }) {
   );
 }
 
-const PrayerTimes = ({ pos }) => {
+const PrayerTimes = ({ pos, appSettings, goQuran }) => {
   const [times, setTimes] = useState(null);
   const [now, setNow] = useState(new Date());
   const [showSettings, setShowSettings] = useState(false);
@@ -209,14 +219,31 @@ const PrayerTimes = ({ pos }) => {
     if (!pos) return;
     const update = () => {
       const coordinates = new adhan.Coordinates(pos.lat, pos.lon);
-      const params = adhan.CalculationMethod.MuslimWorldLeague();
+      const methodId = (appSettings && appSettings.prayerMethod) || 'auto';
+      const resolved = methodId === 'auto' ? (pos.autoMethod || 'MWL') : methodId;
+      const methodFns = {
+        MWL: adhan.CalculationMethod.MuslimWorldLeague,
+        Egyptian: adhan.CalculationMethod.Egyptian,
+        UmmAlQura: adhan.CalculationMethod.UmmAlQura,
+        Karachi: adhan.CalculationMethod.Karachi,
+        NorthAmerica: adhan.CalculationMethod.NorthAmerica,
+        Dubai: adhan.CalculationMethod.Dubai,
+        Qatar: adhan.CalculationMethod.Qatar,
+        Kuwait: adhan.CalculationMethod.Kuwait,
+        Singapore: adhan.CalculationMethod.Singapore,
+        Tehran: adhan.CalculationMethod.Tehran,
+        Turkey: adhan.CalculationMethod.Turkey,
+        MoonsightingCommittee: adhan.CalculationMethod.MoonsightingCommittee
+      };
+      const params = (methodFns[resolved] || adhan.CalculationMethod.MuslimWorldLeague)();
+      params.madhab = (appSettings && appSettings.madhab === 'hanafi') ? adhan.Madhab.Hanafi : adhan.Madhab.Shafi;
       const pt = new adhan.PrayerTimes(coordinates, new Date(), params);
       setTimes(pt);
     };
     update();
     const id = setInterval(update, 60_000);
     return () => clearInterval(id);
-  }, [pos]);
+  }, [pos, appSettings && appSettings.prayerMethod, appSettings && appSettings.madhab]);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -366,9 +393,44 @@ const PrayerTimes = ({ pos }) => {
       .replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
   };
 
+  // Bookmark from Quran tab (last read page)
+  const [bookmark, setBookmark] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('islam_quran_bookmark') || 'null'); } catch { return null; }
+  });
+  useEffect(() => {
+    const onStore = () => {
+      try { setBookmark(JSON.parse(localStorage.getItem('islam_quran_bookmark') || 'null')); } catch {}
+    };
+    const id = setInterval(onStore, 2000);
+    window.addEventListener('storage', onStore);
+    return () => { clearInterval(id); window.removeEventListener('storage', onStore); };
+  }, []);
+
   return (
     <div>
       <audio ref={audioRef} preload="none" />
+
+      {/* Bookmark — last read Quran page */}
+      {bookmark && bookmark.surahName && (
+        <button onClick={() => goQuran && goQuran(bookmark.page)} style={{
+          width: '100%', textAlign: 'right', cursor: 'pointer',
+          background: `linear-gradient(135deg, ${C.surface} 0%, rgba(15,107,95,0.08) 100%)`,
+          border: `1px solid ${C.accent}`, borderRadius: 14, padding: '12px 14px',
+          marginBottom: 12, fontFamily: 'inherit', display: 'flex',
+          justifyContent: 'space-between', alignItems: 'center', gap: 10
+        }}>
+          <div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>وقفت في القراءة عند</div>
+            <div style={{ fontSize: 15, fontWeight: 'bold', color: C.accentLight }}>
+              سورة {bookmark.surahName} — صفحة {String(bookmark.page).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d])}
+            </div>
+          </div>
+          <div style={{
+            background: C.accent, color: '#fff', padding: '8px 14px',
+            borderRadius: 10, fontSize: 13, fontWeight: 'bold', whiteSpace: 'nowrap'
+          }}>تابع القراءة ←</div>
+        </button>
+      )}
 
       {/* Hijri date banner — Umm Al-Qura calendar */}
       <HijriDateBanner now={now} />
@@ -683,7 +745,6 @@ const QuranSection = () => {
   const audioRef = useRef(null);
   const [surahPages, setSurahPages] = useState(null);
   const [dragX, setDragX] = useState(0);
-  const [showMemorize, setShowMemorize] = useState(false);
   const pageStr = String(page).padStart(3, '0');
   const reciterName = (RECITERS.find(r => r.id === reciter) || RECITERS[0]).name;
 
@@ -728,7 +789,33 @@ const QuranSection = () => {
   useEffect(() => () => { if (audioRef.current) audioRef.current.pause(); }, []);
   useEffect(() => { stopAudio(); }, [reciter]);
 
-  useEffect(() => { try { localStorage.setItem('islam_quran_page', String(page)); } catch {} }, [page]);
+  // Bookmark jump from Prayer tab — when set, jump page on mount
+  useEffect(() => {
+    try {
+      const j = parseInt(localStorage.getItem('islam_quran_jump') || '0', 10);
+      if (j >= 1 && j <= 604) {
+        setPage(j);
+        setView('mushaf');
+        localStorage.removeItem('islam_quran_jump');
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem('islam_quran_page', String(page)); } catch {}
+    // Update home-page bookmark with current surah info
+    try {
+      if (currentSurah) {
+        const bm = {
+          page,
+          surahNum: currentSurah.n,
+          surahName: currentSurah.name.replace('سُورَةُ ', '').replace('ٱ', 'ا'),
+          at: Date.now()
+        };
+        localStorage.setItem('islam_quran_bookmark', JSON.stringify(bm));
+      }
+    } catch {}
+  }, [page, currentSurah]);
 
   useEffect(() => {
     Promise.all([
@@ -879,18 +966,11 @@ const QuranSection = () => {
 
           <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <button onClick={goPrev} disabled={page <= 1} style={{ ...btnStyle, opacity: page <= 1 ? 0.4 : 1 }}>السابق →</button>
-            <button
-              onClick={() => setShowMemorize(true)}
-              disabled={!currentSurahNum}
-              style={{
-                background: C.accent, color: '#fff', border: 'none',
-                padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', fontSize: 12,
-                opacity: currentSurahNum ? 1 : 0.5
-              }}>اختبر حفظك</button>
+            <div style={{ fontSize: 12, color: C.muted }}>اسحب للتنقّل</div>
             <button onClick={goNext} disabled={page >= 604} style={{ ...btnStyle, opacity: page >= 604 ? 0.4 : 1 }}>← التالي</button>
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
-            اسحب للتنقّل • اضغط على زر "آية" أو اضغط مطوّلاً للاستماع لآية معيّنة وعرض تفسيرها
+            اضغط على زر "آية" أو اضغط مطوّلاً على الصفحة لعرض التفسير
           </div>
 
           <div
@@ -953,22 +1033,7 @@ const QuranSection = () => {
           page={ayahPicker.page}
           pagesMap={pagesMap}
           data={data}
-          reciter={reciter}
           onClose={() => setAyahPicker(null)}
-        />
-      )}
-
-      {showMemorize && data && currentSurah && (
-        <MemorizationModal
-          surah={currentSurah}
-          data={data}
-          reciter={reciter}
-          onClose={() => setShowMemorize(false)}
-          onPickSurah={(s) => {
-            setShowMemorize(false);
-            if (surahPages && surahPages[s.n]) setPage(surahPages[s.n]);
-            setTimeout(() => setShowMemorize(true), 50);
-          }}
         />
       )}
     </div>
@@ -987,55 +1052,13 @@ const globalAyahNum = (surahs, surahN, ayahN) => {
   return null;
 };
 
-const AyahTafsirModal = ({ page, pagesMap, data, onClose, reciter }) => {
+const AyahTafsirModal = ({ page, pagesMap, data, onClose }) => {
   const ayahs = pagesMap[page] || [];
   const [sel, setSel] = useState(ayahs[0] || null);
-  const [repeat, setRepeat] = useState(() => parseInt(localStorage.getItem('islam_ayah_repeat') || '1', 10) || 1);
-  const [playing, setPlaying] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const audioRef = useRef(null);
-  const playCountRef = useRef(0);
 
   const surah = sel && data.surahs.find(s => s.n === sel.s);
   const ayahText = sel && data.quran[sel.s] && data.quran[sel.s][sel.a];
   const tafsirText = sel && data.tafsir[sel.s] && data.tafsir[sel.s][sel.a];
-
-  useEffect(() => { try { localStorage.setItem('islam_ayah_repeat', String(repeat)); } catch {} }, [repeat]);
-  useEffect(() => () => { if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } }, []);
-
-  // stop audio when user changes ayah selection
-  useEffect(() => {
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
-    playCountRef.current = 0;
-    setPlaying(false); setLoading(false);
-  }, [sel?.s, sel?.a]);
-
-  const playAyah = () => {
-    if (!sel) return;
-    if (playing) {
-      if (audioRef.current) audioRef.current.pause();
-      setPlaying(false); playCountRef.current = 0;
-      return;
-    }
-    const gn = globalAyahNum(data.surahs, sel.s, sel.a);
-    if (!gn) return;
-    const url = ayahAudioUrl(reciter, gn);
-    if (!audioRef.current) audioRef.current = new Audio();
-    const a = audioRef.current;
-    a.src = url;
-    setLoading(true);
-    a.oncanplay = () => { setLoading(false); setPlaying(true); };
-    a.onended = () => {
-      playCountRef.current += 1;
-      if (playCountRef.current < repeat) {
-        a.currentTime = 0; a.play().catch(() => {});
-      } else {
-        setPlaying(false); playCountRef.current = 0;
-      }
-    };
-    a.onerror = () => { setPlaying(false); setLoading(false); alert('تعذّر تشغيل صوت الآية، حاول قارئاً آخر'); };
-    a.play().catch(() => { setPlaying(false); setLoading(false); });
-  };
 
   return (
     <div onClick={onClose} style={{
@@ -1091,23 +1114,6 @@ const AyahTafsirModal = ({ page, pagesMap, data, onClose, reciter }) => {
                   fontFamily: '"Amiri", "Scheherazade New", serif', color: C.text
                 }}>
                   {ayahText || ''} <span style={{ color: C.accent }}>﴿{sel.a}﴾</span>
-                </div>
-
-                <div style={{ marginTop: 14, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button onClick={playAyah} disabled={loading} style={{
-                    background: playing ? C.red : C.accent, color: '#fff',
-                    border: 'none', padding: '10px 18px', borderRadius: 10, cursor: 'pointer',
-                    fontWeight: 'bold', fontSize: 14, minWidth: 130,
-                    boxShadow: '0 2px 8px rgba(15,107,95,0.25)'
-                  }}>
-                    {loading ? '... جاري' : playing ? `جاري التلاوة (${playCountRef.current + 1}/${repeat})` : 'استمع للآية'}
-                  </button>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '4px 8px' }}>
-                    <span style={{ fontSize: 12, color: C.muted }}>تكرار:</span>
-                    <button onClick={() => setRepeat(r => Math.max(1, r - 1))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.accent, fontSize: 18, padding: '0 6px' }}>−</button>
-                    <span style={{ minWidth: 22, textAlign: 'center', fontWeight: 'bold', color: C.text }}>{repeat}</span>
-                    <button onClick={() => setRepeat(r => Math.min(99, r + 1))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: C.accent, fontSize: 18, padding: '0 6px' }}>+</button>
-                  </div>
                 </div>
               </div>
 
@@ -1606,8 +1612,11 @@ const SadaqahSection = () => {
         <div style={{ fontSize: 17, fontWeight: 'bold', fontFamily: '"Amiri", "Scheherazade New", serif', lineHeight: 1.6 }}>
           صَدَقَةٌ جَارِيَةٌ لِأَحْمَد عَبْد الْحَفِيظ
         </div>
+        <div style={{ fontSize: 13, fontWeight: 'bold', opacity: 0.95, marginTop: 6, fontFamily: '"Amiri", "Scheherazade New", serif' }}>
+          ولكلّ أمواتِ المسلمين
+        </div>
         <div style={{ fontSize: 11, opacity: 0.85, marginTop: 6 }}>
-          اللهم اغفر له وارحمه وأسكنه فسيح جناتك — اللهم تقبّل
+          اللهم اغفر لهم وارحمهم وأسكنهم فسيح جناتك — اللهم تقبّل
         </div>
       </div>
 
@@ -2427,11 +2436,96 @@ const SettingsPanel = ({ settings, setSettings, onClose }) => {
             </div>
           </div>
 
+          {/* Prayer calculation method */}
+          <div>
+            <div style={{ color: C.text, fontWeight: 'bold', marginBottom: 6, fontSize: 14 }}>طريقة حساب مواقيت الصلاة</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
+              اختر "تلقائي حسب البلد" أو حدّد الهيئة يدويّاً للحصول على أدقّ مواقيت
+            </div>
+            <select value={settings.prayerMethod} onChange={e => update('prayerMethod', e.target.value)} style={{
+              width: '100%', padding: '12px', borderRadius: 10,
+              background: C.surfaceAlt, color: C.text, border: `1px solid ${C.border}`,
+              fontFamily: 'inherit', fontSize: 14
+            }}>
+              <option value="auto">تلقائي حسب البلد (موصى به)</option>
+              <option value="Egyptian">الهيئة المصرية العامة للمساحة (مصر)</option>
+              <option value="UmmAlQura">أم القرى (السعودية)</option>
+              <option value="Dubai">الإمارات</option>
+              <option value="Qatar">قطر</option>
+              <option value="Kuwait">الكويت</option>
+              <option value="Karachi">الجامعة الإسلامية بكراتشي (باكستان والهند)</option>
+              <option value="NorthAmerica">إسنا (أمريكا الشمالية)</option>
+              <option value="MWL">رابطة العالم الإسلامي</option>
+              <option value="Singapore">سنغافورة</option>
+              <option value="Tehran">طهران</option>
+              <option value="Turkey">تركيا (الديانة)</option>
+              <option value="MoonsightingCommittee">لجنة رؤية الهلال</option>
+            </select>
+          </div>
+
+          {/* Madhab — affects Asr time */}
+          <div>
+            <div style={{ color: C.text, fontWeight: 'bold', marginBottom: 6, fontSize: 14 }}>المذهب الفقهي (لوقت العصر)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {[
+                { id: 'shafii', label: 'الشافعي/المالكي/الحنبلي' },
+                { id: 'hanafi', label: 'الحنفي' }
+              ].map(m => (
+                <button key={m.id} onClick={() => update('madhab', m.id)} style={{
+                  background: settings.madhab === m.id ? C.accent : C.surfaceAlt,
+                  color: settings.madhab === m.id ? '#fff' : C.text,
+                  border: `1px solid ${settings.madhab === m.id ? C.accent : C.border}`,
+                  padding: '12px 8px', borderRadius: 10, cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 13, fontWeight: 'bold'
+                }}>{m.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Daily Quran reminder */}
+          <div>
+            <div style={{ color: C.text, fontWeight: 'bold', marginBottom: 6, fontSize: 14 }}>تذكير يومي بقراءة الورد</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 8, lineHeight: 1.6 }}>
+              يوصلك إشعار كل يوم في الوقت اللي تختاره عشان تفكّرك بوردك من القرآن
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              <button onClick={async () => {
+                if (settings.quranReminderEnabled) { update('quranReminderEnabled', false); return; }
+                if (!('Notification' in window)) { alert('الإشعارات غير مدعومة في هذا المتصفح'); return; }
+                let perm = Notification.permission;
+                if (perm === 'default') perm = await Notification.requestPermission();
+                if (perm === 'granted') update('quranReminderEnabled', true);
+                else alert('يرجى السماح بالإشعارات من إعدادات المتصفح');
+              }} style={{
+                width: 56, height: 30, borderRadius: 15, border: 'none', cursor: 'pointer',
+                background: settings.quranReminderEnabled ? '#22c55e' : C.border,
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute', top: 3,
+                  [settings.quranReminderEnabled ? 'left' : 'right']: 3,
+                  width: 24, height: 24, borderRadius: '50%', background: '#fff'
+                }} />
+              </button>
+              <input
+                type="time"
+                value={settings.quranReminderTime}
+                onChange={e => update('quranReminderTime', e.target.value)}
+                disabled={!settings.quranReminderEnabled}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: 10,
+                  background: C.surfaceAlt, color: C.text, border: `1px solid ${C.border}`,
+                  fontFamily: 'inherit', fontSize: 14, opacity: settings.quranReminderEnabled ? 1 : 0.5
+                }}
+              />
+            </div>
+          </div>
+
           <div style={{
             background: C.surfaceAlt, border: `1px solid ${C.border}`,
             borderRadius: 12, padding: 12, fontSize: 12, color: C.muted, lineHeight: 1.7
           }}>
-            تُحفظ إعداداتك تلقائياً في هذا المتصفح. اختيار "خط أميري" أو "شهرزاد" مناسب لقراءة القرآن، و"القاهرة" أو "تجوّال" أوضح للأذكار والقوائم.
+            تُحفظ إعداداتك تلقائياً في هذا المتصفح. للحصول على إشعارات الأذان والورد اليومي حتى لو الشاشة مقفولة، افتح القائمة في المتصفح ثم اختر "إضافة إلى الشاشة الرئيسية" أو "تثبيت التطبيق".
           </div>
         </div>
       </div>
@@ -2464,6 +2558,43 @@ const TasbihSection = () => {
   });
   const [activeId, setActiveId] = useState(() => localStorage.getItem('islam_tasbih_active') || 'subh');
   const [vibrate, setVibrate] = useState(() => localStorage.getItem('islam_tasbih_vib') !== '0');
+
+  // Global istighfar counter (shared across all users)
+  const [globalIst, setGlobalIst] = useState(null);
+  const [istLocal, setIstLocal] = useState(() => parseInt(localStorage.getItem('islam_ist_mine') || '0', 10) || 0);
+  const istPendingRef = useRef(0);
+  const istSendTimerRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/istighfar').then(r => r.json()).then(d => { if (alive && typeof d.total === 'number') setGlobalIst(d.total); }).catch(() => {});
+    const id = setInterval(() => {
+      fetch('/api/istighfar').then(r => r.json()).then(d => { if (alive && typeof d.total === 'number') setGlobalIst(d.total); }).catch(() => {});
+    }, 15000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
+  useEffect(() => { try { localStorage.setItem('islam_ist_mine', String(istLocal)); } catch {} }, [istLocal]);
+
+  const tapIstighfar = () => {
+    setIstLocal(v => v + 1);
+    setGlobalIst(v => (v == null ? null : v + 1));
+    istPendingRef.current += 1;
+    if (vibrate && navigator.vibrate) { try { navigator.vibrate(15); } catch {} }
+    if (istSendTimerRef.current) clearTimeout(istSendTimerRef.current);
+    istSendTimerRef.current = setTimeout(async () => {
+      const inc = Math.min(50, istPendingRef.current);
+      if (inc <= 0) return;
+      istPendingRef.current -= inc;
+      try {
+        const r = await fetch('/api/istighfar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inc })
+        });
+        const d = await r.json();
+        if (typeof d.total === 'number') setGlobalIst(d.total);
+      } catch {}
+    }, 800);
+  };
 
   useEffect(() => { try { localStorage.setItem('islam_tasbih_v2', JSON.stringify(items)); } catch {} }, [items]);
   useEffect(() => { try { localStorage.setItem('islam_tasbih_active', activeId); } catch {} }, [activeId]);
@@ -2504,6 +2635,45 @@ const TasbihSection = () => {
         <div style={{ fontSize: 11, opacity: 0.85 }}>إجمالي ما سُبِّح في هذا الجهاز</div>
         <div style={{ fontSize: 28, fontWeight: 'bold', marginTop: 4 }}>{totalAll.toLocaleString('ar-EG')}</div>
         <div style={{ fontSize: 11, marginTop: 4, opacity: 0.85 }}>اللهم تقبل</div>
+      </div>
+
+      {/* Global istighfar — shared by all users */}
+      <div style={{
+        background: `linear-gradient(135deg, ${C.gold || '#c4a459'} 0%, #a8893f 100%)`,
+        color: '#fff', borderRadius: 16, padding: 16, marginBottom: 12,
+        boxShadow: C.shadow, textAlign: 'center'
+      }}>
+        <div style={{ fontSize: 11, opacity: 0.9, marginBottom: 4 }}>عدّاد الاستغفار الجماعي</div>
+        <div style={{
+          fontSize: 22, fontFamily: '"Amiri", "Scheherazade New", serif', marginBottom: 8, lineHeight: 1.6
+        }}>أَسْتَغْفِرُ اللهَ الْعَظِيمَ وَأَتُوبُ إِلَيْهِ</div>
+        <button onClick={tapIstighfar} style={{
+          background: '#fff', color: '#a8893f', border: 'none',
+          padding: '14px 28px', borderRadius: 14, cursor: 'pointer',
+          fontSize: 18, fontWeight: 'bold', fontFamily: 'inherit',
+          boxShadow: '0 4px 14px rgba(0,0,0,0.2)', minWidth: 200,
+          WebkitTapHighlightColor: 'transparent'
+        }}>أستغفر الله ✨</button>
+        <div style={{
+          marginTop: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
+          fontSize: 12
+        }}>
+          <div style={{ background: 'rgba(255,255,255,0.18)', borderRadius: 10, padding: '8px 6px' }}>
+            <div style={{ opacity: 0.9, fontSize: 10 }}>كل المسلمين</div>
+            <div style={{ fontSize: 18, fontWeight: 'bold', marginTop: 2 }}>
+              {globalIst == null ? '...' : globalIst.toLocaleString('ar-EG')}
+            </div>
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.18)', borderRadius: 10, padding: '8px 6px' }}>
+            <div style={{ opacity: 0.9, fontSize: 10 }}>مساهمتك</div>
+            <div style={{ fontSize: 18, fontWeight: 'bold', marginTop: 2 }}>
+              {istLocal.toLocaleString('ar-EG')}
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: 10, opacity: 0.85, marginTop: 8 }}>
+          كل ضغطة تُضاف إلى عدّاد جماعي يراه كل المستخدمين — شجّع غيرك ❤
+        </div>
       </div>
 
       {/* Big tap button + selected dhikr */}
@@ -2607,388 +2777,442 @@ const TasbihSection = () => {
   );
 };
 
-// ───────────────────────── MemorizationModal (AI voice tester) ─────────────────────────
-const normalizeWord = (s) => (s || '')
-  .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0610-\u061A\u06DF-\u06E8]/g, '')
-  .replace(/[إأآٱ]/g, 'ا')
-  .replace(/[ىئ]/g, 'ي')
-  .replace(/ؤ/g, 'و')
-  .replace(/ة/g, 'ه')
-  .replace(/[^\u0621-\u064A]/g, '')
-  .trim();
+// ───────────────────────── RecitersSection ─────────────────────────
+  // Fetches the full reciter list from mp3quran.net (~239 reciters). Each reciter has
+  // one or more "moshaf" (recitation styles); each moshaf lists which surahs are recorded.
+  const RECITERS_CACHE_KEY = 'islam_reciters_cache_v2';
+  const RECITERS_CACHE_TTL = 24 * 3600 * 1000;
+  const SURAH_NAMES_AR = [
+    '','الفاتحة','البقرة','آل عمران','النساء','المائدة','الأنعام','الأعراف','الأنفال','التوبة','يونس',
+    'هود','يوسف','الرعد','إبراهيم','الحجر','النحل','الإسراء','الكهف','مريم','طه',
+    'الأنبياء','الحج','المؤمنون','النور','الفرقان','الشعراء','النمل','القصص','العنكبوت','الروم',
+    'لقمان','السجدة','الأحزاب','سبأ','فاطر','يس','الصافات','ص','الزمر','غافر',
+    'فصلت','الشورى','الزخرف','الدخان','الجاثية','الأحقاف','محمد','الفتح','الحجرات','ق',
+    'الذاريات','الطور','النجم','القمر','الرحمن','الواقعة','الحديد','المجادلة','الحشر','الممتحنة',
+    'الصف','الجمعة','المنافقون','التغابن','الطلاق','التحريم','الملك','القلم','الحاقة','المعارج',
+    'نوح','الجن','المزمل','المدثر','القيامة','الإنسان','المرسلات','النبأ','النازعات','عبس',
+    'التكوير','الانفطار','المطففين','الانشقاق','البروج','الطارق','الأعلى','الغاشية','الفجر','البلد',
+    'الشمس','الليل','الضحى','الشرح','التين','العلق','القدر','البينة','الزلزلة','العاديات',
+    'القارعة','التكاثر','العصر','الهمزة','الفيل','قريش','الماعون','الكوثر','الكافرون','النصر',
+    'المسد','الإخلاص','الفلق','الناس'
+  ];
+  const ar = (n) => String(n).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
 
-const MemorizationModal = ({ surah, data, reciter, onClose, onPickSurah }) => {
-  const [showPicker, setShowPicker] = useState(false);
-  const [ayahIdx, setAyahIdx] = useState(0);
-  const [mode, setMode] = useState('idle');           // idle | listening | result
-  const [finalText, setFinalText] = useState('');     // confirmed/finalized words only
-  const [interimText, setInterimText] = useState(''); // current best guess (live)
-  const [supported, setSupported] = useState(true);
-  const [permError, setPermError] = useState('');
-  const [autoNext, setAutoNext] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const recogRef = useRef(null);
-  const finalSegmentsRef = useRef([]); // captures finalized result transcripts by index
-  const userStoppedRef = useRef(false);
-  const startedAtRef = useRef(0);
+  const RecitersSection = () => {
+    const [reciters, setReciters] = useState(null);
+    const [loadErr, setLoadErr] = useState('');
+    const [q, setQ] = useState('');
+    const [picked, setPicked] = useState(null);  // { reciter, moshaf }
+    const [moshafIdx, setMoshafIdx] = useState(0);
+    const [playing, setPlaying] = useState(null); // { reciter, surahNum, status }
+    const audioRef = useRef(null);
 
-  const ayahs = data.quran[surah.n] || {};
-  const ayahNumbers = Object.keys(ayahs).map(n => parseInt(n, 10)).sort((a, b) => a - b);
-  const currentAyahNum = ayahNumbers[ayahIdx] || ayahNumbers[0] || 1;
-  const currentText = ayahs[currentAyahNum] || '';
-  const expectedWords = useMemo(() => currentText.split(/\s+/).filter(Boolean), [currentText]);
+    useEffect(() => {
+      const cached = (() => {
+        try {
+          const raw = JSON.parse(localStorage.getItem(RECITERS_CACHE_KEY) || 'null');
+          if (raw && raw.at && Date.now() - raw.at < RECITERS_CACHE_TTL && Array.isArray(raw.list)) return raw.list;
+        } catch {}
+        return null;
+      })();
+      if (cached) { setReciters(cached); return; }
+      fetch('https://mp3quran.net/api/v3/reciters?language=ar')
+        .then(r => r.json())
+        .then(d => {
+          const list = (d.reciters || []).filter(r => r.moshaf && r.moshaf.length);
+          setReciters(list);
+          try { localStorage.setItem(RECITERS_CACHE_KEY, JSON.stringify({ at: Date.now(), list })); } catch {}
+        })
+        .catch(() => setLoadErr('تعذّر تحميل قائمة القراء — تحقّق من الاتصال بالإنترنت'));
+    }, []);
 
-  const transcript = (finalText + ' ' + interimText).replace(/\s+/g, ' ').trim();
+    useEffect(() => () => { if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; } }, []);
 
-  // Word-level alignment: for each expected word, find the FIRST occurrence in the
-  // remaining said[] from cursor onward. This handles repeated/extra words gracefully.
-  const result = useMemo(() => {
-    if (mode !== 'result' || !finalText.trim()) return null;
-    const said = finalText.split(/\s+/).filter(Boolean);
-    const saidNorm = said.map(normalizeWord).filter(w => w.length > 0);
-    const expNorm  = expectedWords.map(normalizeWord);
+    const filtered = useMemo(() => {
+      if (!reciters) return [];
+      const norm = (s) => (s || '').replace(/[\u064B-\u065F\u0670]/g, '').replace(/[إأآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه');
+      const qn = norm(q.trim());
+      if (!qn) return reciters;
+      return reciters.filter(r => norm(r.name).includes(qn));
+    }, [reciters, q]);
 
-    const out = [];
-    let cursor = 0;
-    for (let ei = 0; ei < expNorm.length; ei++) {
-      const want = expNorm[ei];
-      let matched = false;
-      if (want.length > 0) {
-        // Look ahead through ALL remaining said words; cap to a reasonable window
-        const maxLook = Math.min(saidNorm.length - cursor, 8);
-        for (let k = 0; k < maxLook; k++) {
-          const got = saidNorm[cursor + k];
-          // Exact match OR one is a prefix of the other (catches recognizer cutting off ends)
-          if (got === want || (got.length >= 3 && want.length >= 3 && (got.startsWith(want) || want.startsWith(got)))) {
-            cursor += k + 1;
-            matched = true;
-            break;
-          }
-        }
+    const playSurah = (rec, moshaf, surahNum) => {
+      const url = `${moshaf.server}${String(surahNum).padStart(3, '0')}.mp3`;
+      if (!audioRef.current) audioRef.current = new Audio();
+      const a = audioRef.current;
+      if (playing && playing.reciter === rec.id && playing.surahNum === surahNum && !a.paused) {
+        a.pause(); setPlaying(null); return;
       }
-      out.push({ word: expectedWords[ei], correct: matched });
-    }
-    const correctCount = out.filter(o => o.correct).length;
-    return {
-      tokens: out,
-      correctCount,
-      total: out.length,
-      percent: Math.round((correctCount / Math.max(out.length, 1)) * 100),
-      heard: said.join(' ')
-    };
-  }, [mode, finalText, expectedWords]);
-
-  const startListening = async () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setSupported(false); return; }
-
-    // Warm-up: request mic explicitly so permission prompt is clear (Chrome/Safari)
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        // We don't keep the stream — recognition opens its own. Stop tracks immediately.
-        stream.getTracks().forEach(t => t.stop());
-      }
-    } catch (err) {
-      setSupported(true);
-      setPermError('يجب السماح بالميكروفون من المتصفح أولاً ثم اضغط زر التسجيل من جديد.');
-      return;
-    }
-
-    setSupported(true); setPermError('');
-    setFinalText(''); setInterimText('');
-    finalSegmentsRef.current = [];
-    userStoppedRef.current = false;
-    setMode('listening');
-    startedAtRef.current = Date.now();
-    setElapsed(0);
-
-    const r = new SR();
-    r.lang = 'ar-SA';
-    r.continuous = true;
-    r.interimResults = true;
-    r.maxAlternatives = 1;
-
-    r.onresult = (e) => {
-      // Build the FULL final-only text from results[], so we never duplicate
-      // (events can re-emit the same index when interim → final)
-      let liveInterim = '';
-      for (let i = 0; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          finalSegmentsRef.current[i] = t;
-        } else if (i >= e.resultIndex) {
-          liveInterim += ' ' + t;
-        }
-      }
-      const allFinal = finalSegmentsRef.current.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-      setFinalText(allFinal);
-      setInterimText(liveInterim.trim());
+      a.src = url;
+      a.preload = 'auto';
+      setPlaying({ reciter: rec.id, surahNum, status: 'loading' });
+      a.oncanplay = () => setPlaying(p => p && p.surahNum === surahNum ? { ...p, status: 'playing' } : p);
+      a.onended = () => setPlaying(null);
+      a.onerror = () => {
+        setPlaying({ reciter: rec.id, surahNum, status: 'error' });
+        // Try alternate server (server4 ↔ server10 etc.) as a fallback
+        const alt = url.replace(/server(\d+)/, (_, n) => 'server' + ((+n % 13) + 1));
+        a.src = alt;
+        a.play().catch(() => setPlaying({ reciter: rec.id, surahNum, status: 'error' }));
+      };
+      a.play().catch((err) => {
+        setPlaying({ reciter: rec.id, surahNum, status: 'error' });
+      });
     };
 
-    r.onerror = (e) => {
-      if (e.error === 'no-speech' && !userStoppedRef.current) {
-        // Browser silence-timeout — keep listening if user hasn't pressed stop
-        return;
-      }
-      if (e.error === 'aborted') return;
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        setPermError('الإذن للميكروفون مرفوض. افتح إعدادات الموقع في المتصفح وفعّل الميكروفون.');
-        setMode('idle');
-      } else if (e.error === 'audio-capture') {
-        setPermError('لم يتم العثور على ميكروفون. تأكد من توصيل ميكروفون يعمل.');
-        setMode('idle');
-      } else if (e.error === 'network') {
-        setPermError('خدمة التعرّف على الصوت تتطلب اتصال إنترنت. تحقق من الاتصال وحاول مجدداً.');
-        setMode('idle');
-      } else {
-        setPermError('حدث خطأ في التسجيل: ' + e.error);
-      }
-    };
+    const stopAudio = () => { if (audioRef.current) audioRef.current.pause(); setPlaying(null); };
+    const downloadUrl = (moshaf, surahNum) => `${moshaf.server}${String(surahNum).padStart(3, '0')}.mp3`;
 
-    r.onend = () => {
-      // Auto-restart if the engine stopped on its own (Chrome can drop after silence/timeout)
-      if (!userStoppedRef.current) {
-        try { r.start(); return; } catch {}
-      }
-      setMode('result');
-    };
-
-    recogRef.current = r;
-    try {
-      r.start();
-    } catch (e) {
-      setMode('idle');
-      setPermError('فشل بدء التسجيل. حاول مرة أخرى.');
-    }
-  };
-
-  const stopListening = () => {
-    userStoppedRef.current = true;
-    if (recogRef.current) {
-      try { recogRef.current.stop(); } catch {}
-    }
-    // Safety: if onend doesn't fire within 800ms, force result mode
-    setTimeout(() => setMode(m => m === 'listening' ? 'result' : m), 800);
-  };
-
-  const reset = () => {
-    userStoppedRef.current = true;
-    if (recogRef.current) { try { recogRef.current.abort(); } catch {} }
-    setFinalText(''); setInterimText('');
-    finalSegmentsRef.current = [];
-    setMode('idle'); setPermError(''); setElapsed(0);
-  };
-  const next = () => { if (ayahIdx < ayahNumbers.length - 1) { setAyahIdx(i => i + 1); reset(); } };
-  const prev = () => { if (ayahIdx > 0) { setAyahIdx(i => i - 1); reset(); } };
-
-  // Live elapsed-time counter while listening
-  useEffect(() => {
-    if (mode !== 'listening') return;
-    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000)), 250);
-    return () => clearInterval(id);
-  }, [mode]);
-
-  // Stop recognition on unmount
-  useEffect(() => () => {
-    userStoppedRef.current = true;
-    if (recogRef.current) { try { recogRef.current.abort(); } catch {} }
-  }, []);
-
-  // Auto-advance when ayah is recited correctly enough
-  useEffect(() => {
-    if (autoNext && result && result.percent >= 80 && mode === 'result') {
-      const id = setTimeout(() => next(), 1500);
-      return () => clearTimeout(id);
-    }
-  }, [autoNext, result, mode]);
-
-  return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1100,
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: C.surface, width: '100%', maxWidth: 720,
-        maxHeight: '92vh', borderRadius: '18px 18px 0 0',
-        border: `1px solid ${C.border}`, overflow: 'auto',
-        animation: 'slideUp 0.25s ease-out'
-      }}>
-        <div style={{
-          position: 'sticky', top: 0, background: C.surface, padding: '14px 16px',
-          borderBottom: `1px solid ${C.border}`, display: 'flex',
-          justifyContent: 'space-between', alignItems: 'center', zIndex: 2
-        }}>
-          <div>
-            <div style={{ color: C.accent, fontWeight: 'bold', fontSize: 16 }}>اختبار الحفظ</div>
-            <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
-              {surah.name.replace('سُورَةُ ', '').replace('ٱ', 'ا')} — الآية {currentAyahNum} / {ayahNumbers.length}
-            </div>
-          </div>
-          <button onClick={onClose} style={{
-            background: 'transparent', color: C.muted, border: 'none', cursor: 'pointer', fontSize: 22
-          }}>✕</button>
+    if (loadErr) {
+      return (
+        <div style={{ background: C.surface, padding: 20, borderRadius: 12, textAlign: 'center', border: `1px solid ${C.border}` }}>
+          <div style={{ color: C.red, marginBottom: 10 }}>{loadErr}</div>
+          <button onClick={() => { setLoadErr(''); setReciters(null); setTimeout(() => window.location.reload(), 100); }} style={{
+            background: C.accent, color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit'
+          }}>إعادة المحاولة</button>
         </div>
+      );
+    }
 
-        <div style={{ padding: 14 }}>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-            <button onClick={() => setShowPicker(p => !p)} style={{
-              flex: 1, background: C.surfaceAlt, color: C.accent, border: `1px solid ${C.border}`,
-              padding: '9px', borderRadius: 9, cursor: 'pointer', fontWeight: 'bold', fontSize: 12, fontFamily: 'inherit'
-            }}>تغيير السورة ▾</button>
-            <button onClick={() => setAutoNext(v => !v)} style={{
-              background: autoNext ? C.accent : C.surfaceAlt,
-              color: autoNext ? '#fff' : C.muted,
-              border: `1px solid ${autoNext ? C.accent : C.border}`,
-              padding: '9px 12px', borderRadius: 9, cursor: 'pointer', fontWeight: 'bold', fontSize: 11, fontFamily: 'inherit'
-            }}>{autoNext ? 'الانتقال التلقائي' : 'تشغيل الانتقال التلقائي'}</button>
-          </div>
+    if (!reciters) {
+      return <div style={{ color: C.muted, textAlign: 'center', padding: 30 }}>جاري تحميل القرّاء...</div>;
+    }
 
-          {showPicker && onPickSurah && (
-            <div style={{
-              background: C.surfaceAlt, border: `1px solid ${C.border}`,
-              borderRadius: 10, padding: 8, marginBottom: 10, maxHeight: 220, overflow: 'auto'
-            }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                {data.surahs.map(s => (
-                  <button key={s.n} onClick={() => { onPickSurah(s); setShowPicker(false); }} style={{
-                    background: s.n === surah.n ? C.accent : C.surface,
-                    color: s.n === surah.n ? '#fff' : C.text,
-                    border: `1px solid ${s.n === surah.n ? C.accent : C.border}`,
-                    padding: '7px 8px', borderRadius: 8, cursor: 'pointer',
-                    fontSize: 12, fontFamily: 'inherit', textAlign: 'right',
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-                  }}>{s.n}. {s.name.replace('سُورَةُ ', '').replace('ٱ', 'ا')}</button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Mushaf-style ayah display with colored words */}
-          <div style={{
-            background: C.surfaceAlt, border: `1px solid ${C.border}`,
-            borderRadius: 14, padding: 18, marginBottom: 12, minHeight: 120
-          }}>
-            <div style={{ fontSize: 11, color: C.muted, textAlign: 'center', marginBottom: 10 }}>
-              {result ? `${result.correctCount} / ${result.total} كلمة صحيحة (${result.percent}%)` : 'اضغط زر التسجيل واقرأ الآية'}
-            </div>
-            <div style={{
-              fontSize: 24, lineHeight: 2.4, textAlign: 'center', direction: 'rtl',
-              fontFamily: '"Amiri", "Scheherazade New", serif', color: C.text
-            }}>
-              {result ? (
-                result.tokens.map((tk, i) => (
-                  <span key={i} style={{
-                    color: tk.correct ? '#1e7d3e' : C.red,
-                    background: tk.correct ? 'rgba(30,125,62,0.1)' : 'rgba(200,69,69,0.12)',
-                    padding: '2px 4px', borderRadius: 4, margin: '0 2px',
-                    textDecoration: tk.correct ? 'none' : 'underline',
-                    textDecorationColor: C.red, textDecorationThickness: 2
-                  }}>{tk.word} </span>
-                ))
-              ) : (
-                <span>{currentText} <span style={{ color: C.accent }}>﴿{currentAyahNum}﴾</span></span>
-              )}
-            </div>
-            {(finalText || interimText) && (
-              <div style={{
-                marginTop: 14, padding: 10, background: C.surface, borderRadius: 10,
-                fontSize: 13, color: C.muted, border: `1px solid ${C.border}`
-              }}>
-                <div style={{ fontSize: 10, color: C.sub, marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
-                  <span>ما سمعه التطبيق:</span>
-                  {mode === 'listening' && <span style={{ color: C.red }}>● يستمع الآن…</span>}
-                </div>
-                <div style={{ fontFamily: '"Amiri", serif', fontSize: 16, lineHeight: 1.8, color: C.text }}>
-                  {finalText && <span>{finalText}</span>}
-                  {interimText && (
-                    <span style={{ color: C.muted, opacity: 0.7, fontStyle: 'italic' }}>
-                      {finalText ? ' ' : ''}{interimText}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {!supported && (
-            <div style={{
-              background: 'rgba(200,69,69,0.1)', border: `1px solid ${C.red}`,
-              borderRadius: 10, padding: 12, marginBottom: 12, color: C.red, fontSize: 13, lineHeight: 1.7
-            }}>
-              متصفحك لا يدعم التعرف على الصوت. جرّب فتح التطبيق في Chrome أو Safari على هاتف حديث.
-            </div>
-          )}
-          {permError && (
-            <div style={{
-              background: 'rgba(200,69,69,0.1)', border: `1px solid ${C.red}`,
-              borderRadius: 10, padding: 12, marginBottom: 12, color: C.red, fontSize: 13
-            }}>{permError}</div>
-          )}
-
-          {/* Controls */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <button onClick={prev} disabled={ayahIdx === 0} style={{
-              background: C.surface, color: C.accent, border: `1px solid ${C.border}`,
-              padding: '12px 16px', borderRadius: 10, cursor: 'pointer',
-              fontWeight: 'bold', fontSize: 13, fontFamily: 'inherit',
-              opacity: ayahIdx === 0 ? 0.4 : 1
-            }}>السابقة →</button>
-
-            {mode === 'listening' ? (
-              <button onClick={stopListening} style={{
-                flex: 1, background: C.red, color: '#fff', border: 'none',
-                padding: '14px', borderRadius: 10, cursor: 'pointer',
-                fontWeight: 'bold', fontSize: 14, fontFamily: 'inherit',
-                animation: 'pulse 1.2s ease-in-out infinite',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2
-              }}>
-                <span>● اضغط لإيقاف التسجيل</span>
-                <span style={{ fontSize: 11, opacity: 0.9 }}>
-                  {Math.floor(elapsed/60).toString().padStart(2,'0')}:{(elapsed%60).toString().padStart(2,'0')} — اقرأ الآية بصوت واضح
-                </span>
-              </button>
-            ) : (
-              <button onClick={startListening} style={{
-                flex: 1, background: C.accent, color: '#fff', border: 'none',
-                padding: '14px', borderRadius: 10, cursor: 'pointer',
-                fontWeight: 'bold', fontSize: 14, fontFamily: 'inherit',
-                boxShadow: '0 2px 10px rgba(15,107,95,0.3)'
-              }}>{result ? '🎙️ إعادة الاختبار' : '🎙️ ابدأ التسجيل واقرأ الآية'}</button>
-            )}
-
-            <button onClick={next} disabled={ayahIdx >= ayahNumbers.length - 1} style={{
-              background: C.surface, color: C.accent, border: `1px solid ${C.border}`,
-              padding: '12px 16px', borderRadius: 10, cursor: 'pointer',
-              fontWeight: 'bold', fontSize: 13, fontFamily: 'inherit',
-              opacity: ayahIdx >= ayahNumbers.length - 1 ? 0.4 : 1
-            }}>← التالية</button>
-          </div>
-
-          {result && mode === 'result' && (
-            <button onClick={reset} style={{
-              width: '100%', background: C.surfaceAlt, color: C.text,
-              border: `1px solid ${C.border}`, padding: '10px',
-              borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13
-            }}>مسح وإعادة المحاولة</button>
-          )}
+    // Detail view: a chosen reciter
+    if (picked) {
+      const moshaf = picked.reciter.moshaf[moshafIdx] || picked.reciter.moshaf[0];
+      const surahList = (moshaf.surah_list || '').split(',').filter(Boolean).map(n => parseInt(n, 10));
+      return (
+        <div>
+          <button onClick={() => { stopAudio(); setPicked(null); setMoshafIdx(0); }} style={{
+            background: C.surface, color: C.accent, border: `1px solid ${C.border}`,
+            padding: '8px 14px', borderRadius: 10, cursor: 'pointer', marginBottom: 12,
+            fontFamily: 'inherit', fontSize: 13
+          }}>← كل القرّاء</button>
 
           <div style={{
-            marginTop: 14, padding: 12, background: C.surfaceAlt, borderRadius: 10,
-            fontSize: 11, color: C.muted, lineHeight: 1.7, border: `1px solid ${C.border}`
+            background: `linear-gradient(135deg, ${C.accent} 0%, ${C.accentLight} 100%)`,
+            color: '#fff', padding: 16, borderRadius: 14, marginBottom: 12, textAlign: 'center'
           }}>
-            <strong style={{ color: C.text }}>ملاحظة:</strong> يعتمد التطبيق على تعرّف الصوت في متصفحك (مجاني)
-            ودقّته مع تلاوة القرآن قد لا تكون كاملة دائماً، خاصةً عند سرعة القراءة أو ضعف الميكروفون.
-            اقرأ ببطء ووضوح للحصول على أفضل نتيجة. الكلمات الصحيحة تظهر بالأخضر والخاطئة بالأحمر مع كتابة الكلمة الصحيحة.
+            <div style={{ fontSize: 11, opacity: 0.85 }}>القارئ</div>
+            <div style={{ fontSize: 22, fontWeight: 'bold', marginTop: 4, fontFamily: '"Amiri", serif' }}>{picked.reciter.name}</div>
+            <div style={{ fontSize: 11, opacity: 0.85, marginTop: 4 }}>عدد السور: {ar(surahList.length)} • {moshaf.name}</div>
           </div>
-        </div>
 
-        <style>{`@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(200,69,69,0.5); } 50% { box-shadow: 0 0 0 8px rgba(200,69,69,0); } }`}</style>
+          {picked.reciter.moshaf.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+              {picked.reciter.moshaf.map((m, i) => (
+                <button key={m.id} onClick={() => { stopAudio(); setMoshafIdx(i); }} style={{
+                  background: i === moshafIdx ? C.accent : C.surface, color: i === moshafIdx ? '#fff' : C.text,
+                  border: `1px solid ${i === moshafIdx ? C.accent : C.border}`,
+                  padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit'
+                }}>{m.name}</button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gap: 6 }}>
+            {surahList.map(n => {
+              const isPlaying = playing && playing.reciter === picked.reciter.id && playing.surahNum === n;
+              const status = isPlaying ? playing.status : null;
+              return (
+                <div key={n} style={{
+                  background: C.surface, border: `1px solid ${isPlaying ? C.accent : C.border}`,
+                  borderRadius: 10, padding: 10,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: '50%',
+                      background: isPlaying ? C.accent : C.surfaceAlt, color: isPlaying ? '#fff' : C.accent,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontWeight: 'bold', fontSize: 13, flexShrink: 0
+                    }}>{ar(n)}</div>
+                    <div style={{
+                      fontFamily: '"Amiri", serif', fontSize: 17, fontWeight: 'bold',
+                      color: isPlaying ? C.accentLight : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+                    }}>سورة {SURAH_NAMES_AR[n] || n}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => playSurah(picked.reciter, moshaf, n)} style={{
+                      background: status === 'playing' ? C.red : C.accent, color: '#fff',
+                      border: 'none', padding: '8px 14px', borderRadius: 8, cursor: 'pointer',
+                      fontSize: 13, fontWeight: 'bold', minWidth: 70, fontFamily: 'inherit'
+                    }}>
+                      {status === 'loading' ? '...' : status === 'playing' ? 'إيقاف' : status === 'error' ? 'خطأ ↻' : '▶ تشغيل'}
+                    </button>
+                    <a href={downloadUrl(moshaf, n)} download={`${picked.reciter.name} - ${SURAH_NAMES_AR[n]}.mp3`} style={{
+                      background: C.surfaceAlt, color: C.accent, border: `1px solid ${C.border}`,
+                      padding: '8px 10px', borderRadius: 8, textDecoration: 'none',
+                      fontSize: 12, fontWeight: 'bold', display: 'inline-flex', alignItems: 'center'
+                    }} title="تحميل">⬇</a>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {playing && playing.status === 'error' && (
+            <div style={{ background: 'rgba(200,69,69,0.08)', color: C.red, border: `1px solid ${C.red}`, padding: 10, borderRadius: 10, marginTop: 12, fontSize: 13, textAlign: 'center' }}>
+              تعذّر تشغيل السورة — جاري المحاولة بخادم بديل...
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // List view: all reciters
+    return (
+      <div>
+        <input
+          type="text" value={q} onChange={e => setQ(e.target.value)}
+          placeholder="ابحث عن قارئ..."
+          style={{
+            width: '100%', padding: '12px 14px', borderRadius: 12, marginBottom: 12,
+            background: C.surface, color: C.text, border: `1px solid ${C.border}`,
+            fontFamily: 'inherit', fontSize: 14
+          }}
+        />
+        <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>
+          {ar(filtered.length)} قارئ — اضغط على قارئ لعرض كل سوره
+        </div>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {filtered.map(rec => (
+            <button key={rec.id} onClick={() => { setPicked({ reciter: rec }); setMoshafIdx(0); }} style={{
+              background: C.surface, border: `1px solid ${C.border}`,
+              padding: 12, borderRadius: 10, cursor: 'pointer', textAlign: 'right',
+              fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 'bold', color: C.accentLight, fontFamily: '"Amiri", serif' }}>{rec.name}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                  {rec.moshaf.length === 1 ? rec.moshaf[0].name : `${ar(rec.moshaf.length)} روايات`} • {ar(rec.moshaf[0].surah_total)} سورة
+                </div>
+              </div>
+              <div style={{ color: C.accent, fontSize: 18 }}>‹</div>
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
+  // ───────────────────────── FatwaSection ─────────────────────────
+  const FATWA_SOURCES = [
+    { id: 'islamweb', label: 'إسلام ويب', url: (q) => `https://www.islamweb.net/ar/fatawa/index.php?page=Search&Find=${encodeURIComponent(q)}`, desc: 'مركز الفتوى — أكبر بنك فتاوى عربي' },
+    { id: 'dar',      label: 'دار الإفتاء المصرية', url: (q) => `https://www.dar-alifta.org/ar/Fatawa/Search?text=${encodeURIComponent(q)}`, desc: 'الفتاوى الرسمية لدار الإفتاء' },
+    { id: 'islamqa',  label: 'الإسلام سؤال وجواب', url: (q) => `https://islamqa.info/ar/search?q=${encodeURIComponent(q)}`, desc: 'فتاوى ميسرة بأدلتها' },
+    { id: 'binbaz',   label: 'موقع ابن باز', url: (q) => `https://binbaz.org.sa/search?q=${encodeURIComponent(q)}`, desc: 'فتاوى الشيخ ابن باز رحمه الله' },
+    { id: 'shubily',  label: 'إسلام أون لاين', url: (q) => `https://islamonline.net/?s=${encodeURIComponent(q)}`, desc: 'فتاوى معاصرة' }
+  ];
+  const FatwaSection = () => {
+    const [q, setQ] = useState('');
+    const [recent, setRecent] = useState(() => {
+      try { return JSON.parse(localStorage.getItem('islam_fatwa_recent') || '[]'); } catch { return []; }
+    });
+    const ask = (sourceId) => {
+      const text = q.trim();
+      if (!text) return;
+      const src = FATWA_SOURCES.find(s => s.id === sourceId) || FATWA_SOURCES[0];
+      const url = src.url(text);
+      const next = [text, ...recent.filter(x => x !== text)].slice(0, 8);
+      setRecent(next);
+      try { localStorage.setItem('islam_fatwa_recent', JSON.stringify(next)); } catch {}
+      window.open(url, '_blank', 'noopener');
+    };
+    return (
+      <div>
+        <div style={{
+          background: `linear-gradient(135deg, ${C.accent} 0%, ${C.accentDark} 100%)`,
+          color: '#fff', padding: 16, borderRadius: 14, marginBottom: 12, textAlign: 'center'
+        }}>
+          <div style={{ fontSize: 11, opacity: 0.85 }}>اسأل في أمر دينك</div>
+          <div style={{ fontSize: 18, fontWeight: 'bold', marginTop: 4, fontFamily: '"Amiri", serif' }}>الفتاوى الشرعية</div>
+          <div style={{ fontSize: 11, opacity: 0.85, marginTop: 6, lineHeight: 1.7 }}>
+            اكتب سؤالك تحت ثم اختر مصدر الفتوى — هتفتحلك أقرب فتوى لسؤالك من المصدر مباشرةً
+          </div>
+        </div>
+
+        <textarea
+          value={q} onChange={e => setQ(e.target.value)}
+          placeholder="مثال: ما حكم صلاة الجماعة، أحكام الصيام، زكاة المال..."
+          rows={3}
+          style={{
+            width: '100%', padding: 12, borderRadius: 12, marginBottom: 12,
+            background: C.surface, color: C.text, border: `1px solid ${C.border}`,
+            fontFamily: 'inherit', fontSize: 15, resize: 'vertical', minHeight: 80
+          }}
+        />
+
+        <div style={{ fontSize: 13, color: C.text, fontWeight: 'bold', marginBottom: 8 }}>اختر مصدر الفتوى:</div>
+        <div style={{ display: 'grid', gap: 6, marginBottom: 14 }}>
+          {FATWA_SOURCES.map(src => (
+            <button key={src.id} onClick={() => ask(src.id)} disabled={!q.trim()} style={{
+              background: q.trim() ? C.surface : C.surfaceAlt,
+              border: `1px solid ${q.trim() ? C.accent : C.border}`,
+              padding: 12, borderRadius: 10, cursor: q.trim() ? 'pointer' : 'not-allowed',
+              textAlign: 'right', fontFamily: 'inherit', opacity: q.trim() ? 1 : 0.5,
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 'bold', color: C.accentLight }}>{src.label}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{src.desc}</div>
+              </div>
+              <div style={{ background: C.accent, color: '#fff', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 'bold', whiteSpace: 'nowrap' }}>اسأل ←</div>
+            </button>
+          ))}
+        </div>
+
+        {recent.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>أسئلتك الأخيرة:</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {recent.map((r, i) => (
+                <button key={i} onClick={() => setQ(r)} style={{
+                  background: C.surfaceAlt, color: C.text, border: `1px solid ${C.border}`,
+                  padding: '6px 12px', borderRadius: 16, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit'
+                }}>{r.length > 28 ? r.slice(0, 28) + '...' : r}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div style={{
+          background: 'rgba(196,164,89,0.08)', border: `1px solid ${C.gold || '#c4a459'}`,
+          borderRadius: 12, padding: 14, fontSize: 12, color: C.text, lineHeight: 1.8
+        }}>
+          <div style={{ fontWeight: 'bold', color: C.accentLight, marginBottom: 6 }}>إخلاء مسؤولية</div>
+          الفتاوى المعروضة مأخوذة من المواقع الإسلامية المعتمدة المذكورة، وليست صادرة عن هذا التطبيق.
+          نحن ننقلك مباشرة للمصدر، ولا نتحمّل مسؤولية محتوى الفتوى. فيما يخصّ المسائل الشخصية الدقيقة،
+          يُستحبّ سؤال عالم ثقة من أهل بلدك.
+        </div>
+      </div>
+    );
+  };
+
+  // ───────────────────────── MosquesSection (nearby mosques map) ─────────────────────────
+  const MosquesSection = ({ pos }) => {
+    const mapRef = useRef(null);
+    const containerRef = useRef(null);
+    const [mosques, setMosques] = useState(null);
+    const [err, setErr] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [radius, setRadius] = useState(3000); // meters
+
+    useEffect(() => {
+      if (!pos || !containerRef.current) return;
+      let cancelled = false;
+      (async () => {
+        const L = (await import('leaflet')).default;
+        // Fix default marker icons (leaflet's webpack assumption)
+        delete L.Icon.Default.prototype._getIconUrl;
+        L.Icon.Default.mergeOptions({
+          iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+          iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+          shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
+        });
+        if (cancelled) return;
+        if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+        const map = L.map(containerRef.current, { zoomControl: true }).setView([pos.lat, pos.lon], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenStreetMap', maxZoom: 19
+        }).addTo(map);
+        L.circleMarker([pos.lat, pos.lon], { radius: 8, color: '#0f6b5f', fillColor: '#0f6b5f', fillOpacity: 0.6, weight: 2 })
+          .addTo(map).bindPopup('موقعك');
+        mapRef.current = map;
+        // Fetch mosques
+        setLoading(true); setErr('');
+        const query = `[out:json][timeout:25];(node["amenity"="place_of_worship"]["religion"="muslim"](around:${radius},${pos.lat},${pos.lon});way["amenity"="place_of_worship"]["religion"="muslim"](around:${radius},${pos.lat},${pos.lon}););out center;`;
+        try {
+          const r = await fetch('https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query));
+          const d = await r.json();
+          if (cancelled) return;
+          const list = (d.elements || []).map(e => ({
+            id: e.id,
+            lat: e.lat || (e.center && e.center.lat),
+            lon: e.lon || (e.center && e.center.lon),
+            name: (e.tags && (e.tags['name:ar'] || e.tags.name)) || 'مسجد',
+            tags: e.tags || {}
+          })).filter(m => m.lat && m.lon);
+          setMosques(list);
+          list.forEach(m => {
+            L.marker([m.lat, m.lon]).addTo(map).bindPopup(
+              `<div style="font-family:Amiri,serif;font-size:15px;font-weight:bold;text-align:right;direction:rtl">${m.name}</div>` +
+              `<div style="text-align:right;direction:rtl;margin-top:6px"><a href="https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lon}" target="_blank" rel="noopener">الاتجاهات في خرائط جوجل ←</a></div>`
+            );
+          });
+        } catch (e) {
+          setErr('تعذّر تحميل بيانات المساجد، حاول مرة أخرى');
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+        if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+      };
+    }, [pos && pos.lat, pos && pos.lon, radius]);
+
+    if (!pos) {
+      return (
+        <div style={{ background: C.surface, padding: 30, borderRadius: 12, textAlign: 'center', border: `1px solid ${C.border}` }}>
+          <div style={{ color: C.muted, marginBottom: 10 }}>لازم نعرف موقعك الأول عشان نعرض المساجد القريبة</div>
+          <div style={{ color: C.text, fontSize: 13 }}>اذهب لتبويب "الصلاة" واسمح بالوصول للموقع</div>
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <div style={{
+          background: `linear-gradient(135deg, ${C.accent} 0%, ${C.accentLight} 100%)`,
+          color: '#fff', padding: 14, borderRadius: 12, marginBottom: 10, textAlign: 'center'
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 'bold', fontFamily: '"Amiri", serif' }}>المساجد القريبة منك</div>
+          <div style={{ fontSize: 11, opacity: 0.9, marginTop: 4 }}>
+            {loading ? 'جاري البحث...' : mosques ? `${ar(mosques.length)} مسجد في نطاق ${ar(radius / 1000)} كم` : 'جاري التحميل...'}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, justifyContent: 'center' }}>
+          {[1000, 2000, 3000, 5000, 10000].map(r => (
+            <button key={r} onClick={() => setRadius(r)} style={{
+              background: radius === r ? C.accent : C.surface, color: radius === r ? '#fff' : C.text,
+              border: `1px solid ${radius === r ? C.accent : C.border}`,
+              padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit'
+            }}>{ar(r / 1000)} كم</button>
+          ))}
+        </div>
+
+        <div ref={containerRef} style={{
+          height: '60vh', minHeight: 380, width: '100%',
+          borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden', marginBottom: 12
+        }} />
+
+        {err && <div style={{ color: C.red, padding: 10, textAlign: 'center', fontSize: 13 }}>{err}</div>}
+
+        {mosques && mosques.length > 0 && (
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 'bold', color: C.text, marginBottom: 4 }}>قائمة المساجد</div>
+            {mosques.slice(0, 30).map(m => (
+              <a key={m.id} href={`https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lon}`} target="_blank" rel="noopener" style={{
+                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+                padding: 12, textDecoration: 'none', color: 'inherit',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 'bold', color: C.accentLight, fontFamily: '"Amiri", serif' }}>{m.name}</div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>اضغط للحصول على الاتجاهات</div>
+                </div>
+                <div style={{ color: C.accent, fontSize: 18 }}>←</div>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  
 function LocationBar({ pos, setPos, city, setCity, status, refresh }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -3065,10 +3289,21 @@ function LocationBar({ pos, setPos, city, setCity, status, refresh }) {
   );
 }
 
+// Map ISO country code → best-fit prayer calculation method
+const COUNTRY_TO_METHOD = {
+  EG:'Egyptian', SD:'Egyptian', LY:'Egyptian', SY:'Egyptian', LB:'Egyptian', PS:'Egyptian', JO:'Egyptian', IQ:'Egyptian', YE:'Egyptian',
+  SA:'UmmAlQura', AE:'Dubai', QA:'Qatar', KW:'Kuwait', BH:'UmmAlQura', OM:'UmmAlQura',
+  PK:'Karachi', IN:'Karachi', BD:'Karachi', AF:'Karachi', LK:'Karachi',
+  US:'NorthAmerica', CA:'NorthAmerica', MX:'NorthAmerica',
+  SG:'Singapore', MY:'Singapore', ID:'Singapore', BN:'Singapore', PH:'Singapore',
+  IR:'Tehran', TR:'Turkey',
+  MA:'MWL', DZ:'MWL', TN:'MWL', MR:'MWL'
+};
+
 export default function IslamicApp() {
   const [settings, setSettings] = useAppSettings();
   const [showSettings, setShowSettings] = useState(false);
-  const VALID_TABS = ['prayer','quran','adhkar','tasbih','sadaqah'];
+  const VALID_TABS = ['prayer','quran','reciters','adhkar','tasbih','fatwa','mosques','sadaqah'];
   const [tab, setTab] = useState(() => {
     try {
       const h = (window.location.hash || '').replace('#', '').split('/')[0];
@@ -3083,17 +3318,29 @@ export default function IslamicApp() {
   const [city, setCity] = useState('');
   const [status, setStatus] = useState('جاري تحديد الموقع...');
 
+  // Country detection (for auto prayer method) — done once via server proxy
+  useEffect(() => {
+    if (pos && pos.autoMethod) return;
+    fetch('/api/ip-country').then(r => r.json()).then(d => {
+      const cc = (d.country_code || '').toUpperCase();
+      const m = COUNTRY_TO_METHOD[cc] || 'MWL';
+      setPos(p => p ? { ...p, autoMethod: m, countryCode: cc } : p);
+    }).catch(() => {});
+  }, [pos && pos.lat, pos && pos.lon]);
+
   const detectLocation = () => {
     setStatus('جاري تحديد الموقع...');
     const tryIp = async () => {
       try {
-        const res = await fetch('https://ipapi.co/json/');
+        const res = await fetch('/api/ip-country');
         const d = await res.json();
         if (d.latitude && d.longitude) {
-          setPos({ lat: d.latitude, lon: d.longitude });
+          const cc = (d.country_code || '').toUpperCase();
+          const m = COUNTRY_TO_METHOD[cc] || 'MWL';
+          setPos({ lat: d.latitude, lon: d.longitude, autoMethod: m, countryCode: cc });
           const name = [d.city, d.country_name].filter(Boolean).join('، ');
           setCity(name);
-          try { localStorage.setItem('islam_loc', JSON.stringify({ lat: d.latitude, lon: d.longitude, city: name })); } catch (e) {}
+          try { localStorage.setItem('islam_loc', JSON.stringify({ lat: d.latitude, lon: d.longitude, city: name, autoMethod: m, countryCode: cc })); } catch (e) {}
         } else {
           setStatus('تعذر تحديد الموقع، حدده يدوياً');
         }
@@ -3114,8 +3361,11 @@ export default function IslamicApp() {
             const d = await r.json();
             const a = d.address || {};
             const name = [a.city || a.town || a.village || a.county, a.country].filter(Boolean).join('، ');
+            const cc = (a.country_code || '').toUpperCase();
+            const m = COUNTRY_TO_METHOD[cc] || 'MWL';
+            setPos({ ...loc, autoMethod: m, countryCode: cc });
             setCity(name);
-            try { localStorage.setItem('islam_loc', JSON.stringify({ ...loc, city: name })); } catch (e) {}
+            try { localStorage.setItem('islam_loc', JSON.stringify({ ...loc, city: name, autoMethod: m, countryCode: cc })); } catch (e) {}
           } catch (e) {
             setCity(`${loc.lat.toFixed(3)}، ${loc.lon.toFixed(3)}`);
           }
@@ -3133,7 +3383,7 @@ export default function IslamicApp() {
       const saved = localStorage.getItem('islam_loc');
       if (saved) {
         const s = JSON.parse(saved);
-        setPos({ lat: s.lat, lon: s.lon });
+        setPos({ lat: s.lat, lon: s.lon, autoMethod: s.autoMethod, countryCode: s.countryCode });
         if (s.city) setCity(s.city);
         return;
       }
@@ -3141,8 +3391,51 @@ export default function IslamicApp() {
     detectLocation();
   }, []);
 
+  // Daily Quran reading reminder (browser notification, also fires when SW active)
+  useEffect(() => {
+    if (!settings.quranReminderEnabled) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      try {
+        const [hh, mm] = (settings.quranReminderTime || '20:00').split(':').map(n => parseInt(n, 10));
+        const now = new Date();
+        if (now.getHours() === hh && now.getMinutes() === mm) {
+          const todayKey = `islam_reminder_${now.toISOString().slice(0, 10)}`;
+          if (!localStorage.getItem(todayKey)) {
+            localStorage.setItem(todayKey, '1');
+            const opts = {
+              body: 'وقت قراءة وردك من القرآن الكريم — لا تنسَ أن خيركم من تعلّم القرآن وعلّمه',
+              icon: '/icons/icon-192.png', badge: '/icons/icon-192.png',
+              tag: 'islam-quran-reminder', dir: 'rtl', lang: 'ar', requireInteraction: true
+            };
+            try {
+              if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'show-quran-reminder', opts });
+              } else {
+                new Notification('تذكير الورد اليومي', opts);
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    };
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [settings.quranReminderEnabled, settings.quranReminderTime]);
+
+  // Navigate to a specific Quran page from bookmark
+  const goQuran = (page) => {
+    try {
+      if (page) localStorage.setItem('islam_quran_jump', String(page));
+    } catch {}
+    setTab('quran');
+  };
+
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, direction: "rtl", fontFamily: 'var(--app-font)', fontSize: 'var(--app-font-size)', paddingBottom: 80, color: C.text }}>
+    <div style={{ minHeight: "100vh", background: C.bg, direction: "rtl", fontFamily: 'var(--app-font)', fontSize: 'var(--app-font-size)', paddingBottom: 84, color: C.text }}>
       <header style={{
         padding: '14px 16px', borderBottom: `1px solid ${C.border}`,
         position: 'sticky', top: 0, background: C.bg, zIndex: 10,
@@ -3172,29 +3465,36 @@ export default function IslamicApp() {
         {tab === 'prayer' && (
           <LocationBar pos={pos} setPos={setPos} city={city} setCity={setCity} status={status} refresh={detectLocation} />
         )}
-        {tab === "prayer" && <PrayerTimes pos={pos} />}
-        {tab === "quran" && <QuranSection />}
-        {tab === "adhkar" && <AdhkarHub />}
-        {tab === "tasbih" && <TasbihSection />}
-        {tab === "sadaqah" && <SadaqahSection />}
+        {tab === "prayer"   && <PrayerTimes pos={pos} appSettings={settings} goQuran={goQuran} />}
+        {tab === "quran"    && <QuranSection />}
+        {tab === "reciters" && <RecitersSection />}
+        {tab === "adhkar"   && <AdhkarHub />}
+        {tab === "tasbih"   && <TasbihSection />}
+        {tab === "fatwa"    && <FatwaSection />}
+        {tab === "mosques"  && <MosquesSection pos={pos} />}
+        {tab === "sadaqah"  && <SadaqahSection />}
       </main>
 
       <nav style={{
         position: 'fixed', bottom: 0, width: '100%', background: C.surface,
-        display: 'flex', borderTop: `1px solid ${C.border}`,
-        boxShadow: '0 -4px 14px rgba(0,0,0,0.05)'
+        borderTop: `1px solid ${C.border}`, boxShadow: '0 -4px 14px rgba(0,0,0,0.05)',
+        overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch'
       }}>
+        <div style={{ display: 'flex', minWidth: 'max-content' }}>
         {[
-          { id: "prayer",  label: "الصلاة",      icon: "🕌" },
-          { id: "quran",   label: "القرآن",      icon: "📖" },
-          { id: "adhkar",  label: "الأذكار",     icon: "📿" },
-          { id: "tasbih",  label: "المسبحة",     icon: "🟢" },
-          { id: "sadaqah", label: "صدقة جارية",  icon: "🤲" }
+          { id: "prayer",   label: "الصلاة",     icon: "🕌" },
+          { id: "quran",    label: "القرآن",     icon: "📖" },
+          { id: "reciters", label: "القرّاء",    icon: "🎙" },
+          { id: "adhkar",   label: "الأذكار",    icon: "📿" },
+          { id: "tasbih",   label: "المسبحة",    icon: "🟢" },
+          { id: "fatwa",    label: "الفتاوى",    icon: "⚖" },
+          { id: "mosques",  label: "المساجد",    icon: "🕋" },
+          { id: "sadaqah",  label: "صدقة",       icon: "🤲" }
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{
-            flex: 1, padding: '10px 4px', background: 'none', border: 'none',
+            minWidth: 72, padding: '10px 6px', background: 'none', border: 'none',
             color: tab === t.id ? C.accent : C.muted, cursor: 'pointer',
-            fontFamily: 'inherit', position: 'relative'
+            fontFamily: 'inherit', position: 'relative', flexShrink: 0
           }}>
             <div style={{ fontSize: 20 }}>{t.icon}</div>
             <div style={{ fontSize: 10, marginTop: 2, fontWeight: tab === t.id ? 'bold' : 'normal' }}>{t.label}</div>
@@ -3206,6 +3506,7 @@ export default function IslamicApp() {
             )}
           </button>
         ))}
+        </div>
       </nav>
 
       {showSettings && (
