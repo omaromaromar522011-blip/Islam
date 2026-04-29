@@ -3487,7 +3487,7 @@ export default function IslamicApp() {
           { id: "reciters", label: "القرّاء",    icon: "🎙" },
           { id: "adhkar",   label: "الأذكار",    icon: "📿" },
           { id: "tasbih",   label: "المسبحة",    icon: "🟢" },
-          { id: "fatwa",    label: "الفتاوى",    icon: "⚖" },
+                { id: "fatwa",    label: "الفتاوى",    icon: "⚖" },
           { id: "mosques",  label: "المساجد",    icon: "🕋" },
           { id: "sadaqah",  label: "صدقة",       icon: "🤲" }
         ].map(t => (
